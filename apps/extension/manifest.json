@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "ScamGuard — Cek Dulu Sebelum Transfer",
+  "short_name": "ScamGuard",
+  "version": "1.0.0",
+  "description": "Peringatan saat halaman terindikasi berisiko penipuan, plus panduan darurat dan Evidence Pack.",
+  "default_locale": "id",
+  "minimum_chrome_version": "116",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "ScamGuard",
+    "default_icon": { "16": "icons/16.png", "32": "icons/32.png" }
+  },
+  "background": { "service_worker": "src/service_worker.ts", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "exclude_matches": ["https://chrome.google.com/webstore/*", "https://chromewebstore.google.com/*"],
+      "js": ["src/content/content.ts"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "permissions": ["storage", "activeTab", "tabs", "alarms"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "web_accessible_resources": [{ "resources": ["assets/*", "icons/*"], "matches": ["<all_urls>"] }]
+}

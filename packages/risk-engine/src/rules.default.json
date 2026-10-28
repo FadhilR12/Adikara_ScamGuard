@@ -1,0 +1,299 @@
+{
+  "version": "2026.10.28-1",
+  "schemaVersion": 1,
+  "_note": "brandDomains & allowlist adalah contoh awal; tim wajib memverifikasi setiap domain dari sumber resmi (PRD Lampiran B).",
+  "text": [
+    {
+      "id": "TXT_GUARANTEED_PROFIT",
+      "category": "profit",
+      "patterns": [
+        "profit (tetap|pasti|harian)",
+        "untung (pasti|tetap)",
+        "keuntungan (tetap|pasti)",
+        "pasti cuan",
+        "dijamin (untung|profit|cuan)"
+      ],
+      "weight": 30,
+      "title": "Janji keuntungan tidak wajar"
+    },
+    {
+      "id": "TXT_GUARANTEE_100",
+      "category": "profit",
+      "patterns": [
+        "jaminan 100 ?%",
+        "tanpa risiko",
+        "anti rugi",
+        "bebas risiko",
+        "modal kembali 100"
+      ],
+      "weight": 20,
+      "title": "Klaim tanpa risiko"
+    },
+    {
+      "id": "TXT_URGENCY",
+      "category": "urgency",
+      "patterns": [
+        "transfer sekarang",
+        "segera transfer",
+        "slot terbatas",
+        "kuota terbatas",
+        "hari ini saja",
+        "promo berakhir",
+        "batas waktu",
+        "sebelum terlambat"
+      ],
+      "weight": 20,
+      "title": "Desakan untuk segera transfer"
+    },
+    {
+      "id": "TXT_DEPOSIT",
+      "category": "payment",
+      "patterns": [
+        "deposit (awal|minimal)",
+        "biaya (pencairan|admin|pajak).{0,30}(dulu|terlebih)",
+        "biaya pencairan",
+        "top ?up untuk (menarik|withdraw|mencairkan)"
+      ],
+      "weight": 20,
+      "title": "Diminta bayar dulu untuk mencairkan"
+    },
+    {
+      "id": "TXT_OTP_PIN",
+      "category": "credential",
+      "patterns": [
+        "(kirim|mengirim|berikan|memberikan|sebutkan|menyebutkan|bagikan|membagikan|infokan|menginfokan)(kan)?( kami| ke kami| ke admin)?( kode)? (otp|pin|kata sandi|password|cvv|kode verifikasi)",
+        "(kode )?(otp|kode verifikasi|cvv)\\b.{0,30}(kirim|mengirim|berikan|memberikan|sebutkan|menyebutkan|bagikan|membagikan|infokan|menginfokan)",
+        "\\bpin\\b.{0,30}(kirim|mengirim|berikan|memberikan|sebutkan|menyebutkan|bagikan|membagikan|infokan|menginfokan)"
+      ],
+      "strip": [
+        "(jangan|tidak pernah|tidak akan pernah|never)[^.!?\\n]{0,80}"
+      ],
+      "weight": 40,
+      "title": "Meminta kode OTP / PIN"
+    },
+    {
+      "id": "TXT_IMPERSONATION",
+      "category": "impersonation",
+      "patterns": [
+        "(cs|admin|petugas) (resmi|bank|ojk)",
+        "akun anda (diblokir|ditangguhkan|dibekukan)",
+        "verifikasi data"
+      ],
+      "weight": 15,
+      "title": "Mengaku sebagai pihak resmi"
+    },
+    {
+      "id": "TXT_PRIZE",
+      "category": "profit",
+      "patterns": [
+        "(selamat|anda) (memenangkan|terpilih)",
+        "hadiah (undian|langsung)",
+        "pemenang undian"
+      ],
+      "weight": 20,
+      "title": "Iming-iming hadiah"
+    },
+    {
+      "id": "TXT_JOB_TASK",
+      "category": "profit",
+      "patterns": [
+        "kerja (paruh waktu|dari rumah).{0,30}(like|subscribe|tugas)",
+        "komisi per tugas",
+        "(like|subscribe).{0,30}(dibayar|komisi)"
+      ],
+      "weight": 20,
+      "title": "Pekerjaan dengan bayaran tidak wajar"
+    },
+    {
+      "id": "TXT_PERSONAL_ACCOUNT",
+      "category": "payment",
+      "patterns": [
+        "(transfer|tf)\\b.{0,15}\\bke (rekening )?(pribadi|a\\.?n\\b)"
+      ],
+      "weight": 10,
+      "title": "Pembayaran ke rekening pribadi"
+    }
+  ],
+  "weights": {
+    "TXT_HIGH_RETURN_PCT": {
+      "weight": 25,
+      "title": "Persentase keuntungan terlalu tinggi",
+      "category": "profit"
+    },
+    "URL_SHORTENER": {
+      "weight": 15,
+      "title": "Tautan pendek",
+      "category": "url"
+    },
+    "URL_RISKY_TLD": {
+      "weight": 15,
+      "title": "Ekstensi domain sering disalahgunakan",
+      "category": "url"
+    },
+    "URL_MANY_SUBDOMAIN": {
+      "weight": 10,
+      "title": "Alamat situs terlalu berlapis",
+      "category": "url"
+    },
+    "URL_IP_HOST": {
+      "weight": 40,
+      "title": "Situs memakai alamat IP",
+      "category": "url"
+    },
+    "URL_PUNYCODE": {
+      "weight": 20,
+      "title": "Nama domain memakai huruf mirip",
+      "category": "url"
+    },
+    "URL_LOOKALIKE": {
+      "weight": 55,
+      "title": "Nama domain mirip layanan resmi",
+      "category": "impersonation"
+    },
+    "URL_NUMERIC_BRANDY": {
+      "weight": 10,
+      "title": "Pola nama domain mencurigakan",
+      "category": "url"
+    },
+    "URL_HTTP": {
+      "weight": 10,
+      "title": "Koneksi tidak aman",
+      "category": "url"
+    },
+    "URL_REPORTED": {
+      "weight": 40,
+      "title": "Pernah dilaporkan pengguna lain",
+      "category": "url"
+    },
+    "PG_PAYMENT_FORM": {
+      "weight": 15,
+      "title": "Formulir pembayaran di halaman berisiko",
+      "category": "payment"
+    },
+    "PG_COUNTDOWN": {
+      "weight": 10,
+      "title": "Hitung mundur untuk menekan keputusan",
+      "category": "urgency"
+    },
+    "NUM_REPORTED": {
+      "weight": 30,
+      "title": "Nomor ini pernah dilaporkan",
+      "category": "number"
+    },
+    "NUM_INVALID_FORMAT": {
+      "weight": 10,
+      "title": "Format nomor tidak umum",
+      "category": "number"
+    }
+  },
+  "brands": [
+    "bca",
+    "bri",
+    "bni",
+    "mandiri",
+    "bsi",
+    "dana",
+    "ovo",
+    "gopay",
+    "shopee",
+    "tokopedia",
+    "lazada",
+    "bukalapak",
+    "blibli",
+    "ojk",
+    "pln",
+    "pajak"
+  ],
+  "brandDomains": [
+    "bca.co.id",
+    "klikbca.com",
+    "bri.co.id",
+    "bni.co.id",
+    "bankmandiri.co.id",
+    "bankbsi.co.id",
+    "dana.id",
+    "ovo.id",
+    "gojek.com",
+    "gopay.co.id",
+    "shopee.co.id",
+    "tokopedia.com",
+    "lazada.co.id",
+    "bukalapak.com",
+    "blibli.com",
+    "ojk.go.id",
+    "pln.co.id",
+    "pajak.go.id"
+  ],
+  "allowlist": [
+    "go.id",
+    "ojk.go.id",
+    "google.com",
+    "google.co.id",
+    "youtube.com",
+    "wikipedia.org",
+    "github.com",
+    "bca.co.id",
+    "klikbca.com",
+    "bri.co.id",
+    "bni.co.id",
+    "bankmandiri.co.id",
+    "bankbsi.co.id",
+    "dana.id",
+    "ovo.id",
+    "gojek.com",
+    "gopay.co.id",
+    "shopee.co.id",
+    "tokopedia.com",
+    "lazada.co.id",
+    "bukalapak.com",
+    "blibli.com",
+    "pln.co.id",
+    "kompas.com",
+    "detik.com",
+    "tempo.co"
+  ],
+  "shorteners": [
+    "bit.ly",
+    "s.id",
+    "tinyurl.com",
+    "cutt.ly",
+    "t.ly",
+    "rebrand.ly",
+    "shorturl.at",
+    "is.gd",
+    "ow.ly"
+  ],
+  "riskyTlds": [
+    "xyz",
+    "top",
+    "click",
+    "buzz",
+    "icu",
+    "cyou",
+    "rest",
+    "monster",
+    "online",
+    "site",
+    "live"
+  ],
+  "lowRiskTlds": [
+    "shop"
+  ],
+  "moneyWords": [
+    "cuan",
+    "profit",
+    "untung",
+    "invest",
+    "investasi",
+    "bonus",
+    "hoki",
+    "gacor",
+    "rejeki",
+    "cash",
+    "duit",
+    "money",
+    "hadiah",
+    "undian",
+    "saldo"
+  ]
+}

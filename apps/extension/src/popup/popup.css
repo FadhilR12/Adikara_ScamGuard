@@ -1,0 +1,52 @@
+@import '@fontsource/plus-jakarta-sans/latin-400.css';
+@import '@fontsource/plus-jakarta-sans/latin-500.css';
+@import '@fontsource/plus-jakarta-sans/latin-600.css';
+@import '@fontsource/plus-jakarta-sans/latin-700.css';
+@import '@fontsource/plus-jakarta-sans/latin-800.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  @apply font-sans text-ink antialiased;
+  font-size: 14px;
+  max-height: 600px;
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex h-12 items-center justify-center gap-2 rounded-btn bg-primary px-5 text-[15px] font-bold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply inline-flex h-12 items-center justify-center gap-2 rounded-btn border-[1.5px] border-inputline bg-white px-5 text-[15px] font-bold text-ink transition hover:bg-bg disabled:opacity-60;
+  }
+  .icon-btn {
+    @apply inline-flex h-11 w-11 items-center justify-center rounded-btn text-ink-2 transition hover:bg-bg;
+  }
+  .section-label {
+    @apply text-[12px] font-semibold uppercase tracking-wide text-ink-2;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold;
+  }
+  .dot { @apply h-1.5 w-1.5 rounded-full; }
+}
+
+/* Di luar @layer agar tidak dibuang purge: nama kelas dibentuk dinamis (pill-${level}). */
+.pill-low { @apply border-low-border bg-low-bg text-low-text; }
+.pill-medium { @apply border-medium-border bg-medium-bg text-medium-text; }
+.pill-high { @apply border-high-border bg-high-bg text-high-text; }
+.dot-low { @apply bg-low; }
+.dot-medium { @apply bg-medium; }
+.dot-high { @apply bg-high; }
+
+:focus-visible {
+  outline: 3px solid #99f6e4;
+  outline-offset: 2px;
+}
+
+.spinner {
+  @apply inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white;
+}

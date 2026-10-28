@@ -1,0 +1,250 @@
+[
+ {
+  "id": "C-01",
+  "type": "text",
+  "value": "Investasi profit tetap 30% per minggu! Slot terbatas, transfer sekarang ke rekening a.n Budi.",
+  "expect": "high"
+ },
+ {
+  "id": "C-02",
+  "type": "url",
+  "value": "https://bit.ly/cuan-harian",
+  "expect": "high",
+  "resolved": {
+   "url": "https://investasi-cuan88.xyz/",
+   "text": "Profit tetap 30% per minggu, slot terbatas, transfer sekarang. Kirim kode OTP ke admin untuk aktivasi."
+  }
+ },
+ {
+  "id": "C-03",
+  "type": "text",
+  "value": "Selamat! Anda memenangkan undian. Kirim kode OTP untuk verifikasi hadiah.",
+  "expect": "high"
+ },
+ {
+  "id": "C-04",
+  "type": "text",
+  "value": "Kerja paruh waktu dari rumah, komisi per tugas like & subscribe, deposit awal 100rb, slot terbatas hari ini saja",
+  "expect": "high"
+ },
+ {
+  "id": "C-05",
+  "type": "url",
+  "value": "https://bca-promo-hadiah.top/login",
+  "expect": "high"
+ },
+ {
+  "id": "C-06",
+  "type": "text",
+  "value": "CS resmi bank: akun anda diblokir, segera verifikasi data dan sebutkan PIN anda sekarang juga, batas waktu 10 menit",
+  "expect": "high"
+ },
+ {
+  "id": "C-10",
+  "type": "url",
+  "value": "http://192.168.10.5/bayar",
+  "expect": "medium+"
+ },
+ {
+  "id": "C-11",
+  "type": "text",
+  "value": "Dijamin untung! Keuntungan pasti 5% per hari tanpa risiko. Segera transfer sebelum terlambat.",
+  "expect": "high"
+ },
+ {
+  "id": "C-12",
+  "type": "text",
+  "value": "Anda terpilih mendapatkan hadiah langsung Rp10 juta. Untuk pencairan wajib bayar biaya admin terlebih dahulu, transfer sekarang.",
+  "expect": "high"
+ },
+ {
+  "id": "C-13",
+  "type": "text",
+  "value": "Dana anda sudah siap dicairkan, tetapi harus top up untuk menarik saldo. Berikan kode verifikasi yang kami kirim lewat SMS. Batas waktu hari ini saja.",
+  "expect": "high"
+ },
+ {
+  "id": "C-14",
+  "type": "url",
+  "value": "https://tokopedla-promo.xyz/klaim",
+  "expect": "high"
+ },
+ {
+  "id": "C-15",
+  "type": "text",
+  "value": "Promo pinjaman cair 5 menit tanpa risiko! Kuota terbatas, kirimkan PIN ATM dan foto KTP ke admin resmi kami.",
+  "expect": "high"
+ },
+ {
+  "id": "C-16",
+  "type": "text",
+  "value": "Grup trading VIP: profit harian 20% per hari, anti rugi, modal kembali 100%. Slot terbatas!",
+  "expect": "high"
+ },
+ {
+  "id": "C-17",
+  "type": "text",
+  "value": "Petugas OJK: rekening anda dibekukan. Akun anda diblokir. Verifikasi data dengan mengirimkan kode OTP sekarang, sebelum terlambat.",
+  "expect": "high"
+ },
+ {
+  "id": "C-18",
+  "type": "url",
+  "value": "https://shopee-hadiah-undian.online/login",
+  "expect": "high"
+ },
+ {
+  "id": "C-19",
+  "type": "text",
+  "value": "K3rja dar1 rumah, komisi per tugas like YouTube dibayar 50rb. Deposit minimal 200rb untuk naik level, segera transfer!",
+  "expect": "high"
+ },
+ {
+  "id": "C-20",
+  "type": "text",
+  "value": "SELAMAT!!! 🎉 Anda memenangkan hadiah undian mobil. Biaya pajak hadiah harus dibayar dulu, tf ke rekening pribadi panitia. Promo berakhir hari ini saja.",
+  "expect": "high"
+ },
+ {
+  "id": "C-21",
+  "type": "url",
+  "value": "https://s.id/bonus-gacor",
+  "expect": "high",
+  "resolved": {
+   "url": "https://gacor-bonus77.site/daftar",
+   "text": "Bonus deposit 100%. Pasti cuan, jaminan 100% menang! Deposit minimal 50rb, transfer sekarang slot terbatas."
+  }
+ },
+ {
+  "id": "C-22",
+  "type": "text",
+  "value": "Investasi emas digital untung tetap 15% per bulan, jaminan 100% aman tanpa risiko. Hari ini saja daftar dan deposit awal 1 juta.",
+  "expect": "high"
+ },
+ {
+  "id": "C-23",
+  "type": "url",
+  "value": "https://login-mandiri-verifikasi.click/secure",
+  "expect": "high"
+ },
+ {
+  "id": "C-07",
+  "type": "text",
+  "value": "Promo diskon 50% hari ini saja di toko resmi",
+  "expect": "low|medium"
+ },
+ {
+  "id": "C-08",
+  "type": "url",
+  "value": "https://www.wikipedia.org",
+  "expect": "low"
+ },
+ {
+  "id": "C-09",
+  "type": "text",
+  "value": "Pembayaran tagihan listrik berhasil. Terima kasih.",
+  "expect": "low"
+ },
+ {
+  "id": "C-24",
+  "type": "url",
+  "value": "https://www.tokopedia.com/cart",
+  "expect": "low"
+ },
+ {
+  "id": "C-25",
+  "type": "url",
+  "value": "https://www.bca.co.id/id/individu",
+  "expect": "low"
+ },
+ {
+  "id": "C-26",
+  "type": "text",
+  "value": "Bank resmi tidak pernah meminta kode OTP atau PIN Anda. Jangan bagikan kepada siapa pun, termasuk petugas.",
+  "expect": "low"
+ },
+ {
+  "id": "C-27",
+  "type": "text",
+  "value": "Rapat koordinasi tim dipindah ke hari Kamis pukul 10.00 di ruang 3B.",
+  "expect": "low"
+ },
+ {
+  "id": "C-28",
+  "type": "url",
+  "value": "https://github.com/openai/whisper",
+  "expect": "low"
+ },
+ {
+  "id": "C-29",
+  "type": "text",
+  "value": "Terima kasih telah berbelanja. Pesanan Anda sedang dikemas dan akan dikirim besok.",
+  "expect": "low"
+ },
+ {
+  "id": "C-30",
+  "type": "url",
+  "value": "https://www.kompas.com/tren/read/2026/10/28/berita",
+  "expect": "low"
+ },
+ {
+  "id": "C-31",
+  "type": "text",
+  "value": "Kurs rupiah hari ini menguat 0,3% terhadap dolar AS menurut data Bank Indonesia.",
+  "expect": "low"
+ },
+ {
+  "id": "C-32",
+  "type": "text",
+  "value": "Masukkan kode OTP yang dikirim ke nomor Anda pada kolom di bawah untuk menyelesaikan login. Jangan berikan kode ini kepada siapa pun.",
+  "expect": "low|medium"
+ },
+ {
+  "id": "C-33",
+  "type": "url",
+  "value": "https://docs.google.com/document/d/abc123/edit",
+  "expect": "low"
+ },
+ {
+  "id": "C-34",
+  "type": "text",
+  "value": "Jadwal kuliah semester ganjil sudah dapat dilihat di portal akademik.",
+  "expect": "low"
+ },
+ {
+  "id": "C-35",
+  "type": "url",
+  "value": "https://shopee.co.id/flash_sale",
+  "expect": "low"
+ },
+ {
+  "id": "C-36",
+  "type": "text",
+  "value": "Bunga deposito 3,5% per tahun dijamin LPS sesuai ketentuan.",
+  "expect": "low"
+ },
+ {
+  "id": "C-37",
+  "type": "url",
+  "value": "https://www.ojk.go.id/id/Default.aspx",
+  "expect": "low"
+ },
+ {
+  "id": "C-38",
+  "type": "text",
+  "value": "Checkout berhasil. Silakan lakukan pembayaran melalui virtual account sebelum 23:59.",
+  "expect": "low|medium"
+ },
+ {
+  "id": "C-39",
+  "type": "url",
+  "value": "https://news.detik.com/berita/d-1234567/judul",
+  "expect": "low"
+ },
+ {
+  "id": "C-40",
+  "type": "text",
+  "value": "Selamat ulang tahun! Semoga sehat selalu dan sukses dalam pekerjaan.",
+  "expect": "low"
+ }
+]
