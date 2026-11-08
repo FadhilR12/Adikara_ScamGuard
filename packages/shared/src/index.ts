@@ -168,5 +168,35 @@ export const BANKS = [
   'BCA', 'BRI', 'BNI', 'Mandiri', 'BSI', 'BTN', 'CIMB Niaga', 'Permata', 'Danamon', 'OCBC',
   'Bank Jago', 'SeaBank', 'DANA', 'OVO', 'GoPay', 'ShopeePay', 'LinkAja', 'Lainnya',
 ];
+
+export interface ReportingSession {
+  incidentId: string;
+  incidentCode: string;
+  createdAt: number;
+  expiresAt: number;
+  status: 'active' | 'completed';
+  target: {
+    bankName?: string;
+    accountNumber?: string;
+    accountHolder?: string;
+    perpetratorPhone?: string;
+    perpetratorPlatform?: string;
+    lossAmount?: number;
+    incidentDate?: string;
+    chronology: string;
+  };
+  evidenceFile?: {
+    fileName: string;
+    mimeType: string;
+    base64?: string;
+    sizeBytes?: number;
+    url?: string;
+  };
+  result?: {
+    iascReportNo?: string;
+    submittedAt?: number;
+  };
+}
+
 export * from './demo';
 export * from './incident';

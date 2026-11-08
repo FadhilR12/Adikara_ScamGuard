@@ -6,6 +6,7 @@ import { ALLOW_HOURS, OVERLAY_SCORE, OVERLAY_SCORE_WITH_PAYMENT } from '../confi
 import { send } from '../lib/messaging';
 import { getLocal, getRules } from '../lib/storage';
 import { extractPage } from './extract';
+import { mountIsland, ScamGuardIsland } from './island/island';
 import { isOverlayOpen, removeOverlay, renderOverlay } from './overlay/overlay';
 
 const RESCAN_INTERVAL_MS = 3000;
@@ -14,9 +15,34 @@ const RESCAN_MIN_NEW_CHARS = 500;
 const domain = location.hostname.replace(/^www\./, '');
 let overlayHandled = false; // overlay hanya sekali per muat halaman
 let shownAt = 0;
+let islandInstance: ScamGuardIsland | null = null;
+
+export function isIascPage(): boolean {
+  const host = location.hostname.toLowerCase();
+  const path = location.pathname.toLowerCase();
+  return host.includes('iasc.ojk.go.id') || path.startsWith('/demo/iasc-portal') || path.includes('/guest/laporanv2');
+}
+
+async function checkAndMountIsland(): Promise<void> {
+  if (!isIascPage()) return;
+  const session = await send({ type: 'GET_REPORTING_SESSION' }).catch(() => null);
+  if (session && !islandInstance) {
+    islandInstance = mountIsland(session);
+  }
+}
+
+// Dengarkan event dari Web ScamGuard (mis. saat user klik "Lanjut ke IASC")
+window.addEventListener('message', async (e) => {
+  if (e.source !== window || !e.data || e.data.type !== 'SCAMGUARD_START_IASC_REPORT') return;
+  const session = e.data.payload;
+  if (session) {
+    await send({ type: 'START_REPORTING_SESSION', session }).catch(() => {});
+  }
+});
 
 function isExcluded(): boolean {
   if (!/^https?:$/.test(location.protocol)) return true;
+  if (isIascPage()) return true; // Halaman IASC tidak discan sebagai phishing
   const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   // localhost dikecualikan (AC-02.1), kecuali halaman simulasi demo ScamGuard.
   return local && !location.pathname.startsWith('/demo/');
@@ -123,3 +149,6 @@ if (!isExcluded()) {
   void scan();
   observe();
 }
+
+// Inisialisasi Dynamic Island Co-Pilot bila berada di portal IASC / mock demo
+void checkAndMountIsland();

@@ -6,7 +6,17 @@ import { api, stripQuery, track } from './lib/api';
 import { fetchPage } from './lib/fetch-page';
 import type { CheckResponse, Message, TabStatus } from './lib/messaging';
 import {
-  getAllowedDomains, getDeviceId, getRules, getTabResult, isEnabled, pushHistory, setLocal, setTabResult,
+  clearActiveReporting,
+  getActiveReporting,
+  getAllowedDomains,
+  getDeviceId,
+  getRules,
+  getTabResult,
+  isEnabled,
+  pushHistory,
+  setActiveReporting,
+  setLocal,
+  setTabResult,
 } from './lib/storage';
 
 const BADGE: Record<RiskResult['level'], { text: string; color: string }> = {
@@ -165,6 +175,36 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
     case 'EVENT':
       track(msg.name, msg.props);
       return { ok: true };
+    case 'START_REPORTING_SESSION': {
+      await setActiveReporting(msg.session);
+      track('iasc_session_started', { incidentId: msg.session.incidentId });
+      return { ok: true };
+    }
+    case 'GET_REPORTING_SESSION': {
+      const session = await getActiveReporting();
+      return session;
+    }
+    case 'CLEAR_REPORTING_SESSION': {
+      await clearActiveReporting();
+      return { ok: true };
+    }
+    case 'SAVE_IASC_REPORT_NO': {
+      const session = await getActiveReporting();
+      if (session) {
+        session.result = { iascReportNo: msg.reportNo, submittedAt: Date.now() };
+        session.status = 'completed';
+        await setActiveReporting(session);
+      }
+      const incId = msg.incidentId ?? session?.incidentId;
+      if (incId) {
+        await api(`/incidents/${incId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ iascReportNo: msg.reportNo }),
+        });
+      }
+      track('iasc_report_captured', { reportNo: msg.reportNo, incidentId: incId });
+      return { ok: true };
+    }
   }
 }
 

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { IASC_URL } from '@/lib/config';
 import { fromLocalInput, hms, toLocalInput } from '@/lib/format';
+import { startIascReporting } from '@/lib/reporting-session';
 import { bankScript } from '@/lib/script';
 import { useIncident } from '@/lib/useIncident';
 import { Footer, Logo } from '../Header';
@@ -211,16 +212,31 @@ export function EmergencyMode({ id }: { id: string }) {
                   <Link href={evidenceHref} onClick={() => void flush()} className={buttonClass('secondary')}><FileText className="h-4 w-4" aria-hidden /> Buka Evidence Pack</Link>
                 </NumberedStep>
                 <NumberedStep n={2} title="Buka situs IASC, isi formulir, lalu lampirkan PDF.">
-                  {IASC_URL ? (
-                    <a href={IASC_URL} target="_blank" rel="noopener noreferrer" className={buttonClass('secondary')}
-                      onClick={() => { void api.track('iasc_link_clicked'); update({ checklist: { openedIasc: true } }); }}>
-                      Buka situs IASC <ExternalLink className="h-4 w-4" aria-hidden />
-                    </a>
-                  ) : (
-                    <p className="rounded-btn border border-medium-border bg-medium-bg px-3.5 py-2.5 text-[13.5px] text-medium-text">
-                      Tautan resmi IASC belum dikonfigurasi. Cari melalui situs resmi OJK (ojk.go.id), jangan dari tautan yang dikirim orang lain.
-                    </p>
-                  )}
+                  <div className="flex flex-col gap-2.5 sm:flex-row">
+                    <button
+                      type="button"
+                      className={buttonClass('primary')}
+                      onClick={() => {
+                        void api.track('iasc_link_clicked');
+                        update({ checklist: { openedIasc: true } });
+                        void startIascReporting(incident, [], 'official');
+                      }}
+                    >
+                      Buka IASC dengan Co-Pilot ↗
+                    </button>
+                    <button
+                      type="button"
+                      className={buttonClass('secondary')}
+                      onClick={() => {
+                        void api.track('iasc_demo_clicked');
+                        update({ checklist: { openedIasc: true } });
+                        void startIascReporting(incident, [], 'demo');
+                      }}
+                      title="Gunakan simulasi demo untuk demonstrasi luring/pitching lomba"
+                    >
+                      Simulasi Demo IASC (Pitch) ↗
+                    </button>
+                  </div>
                 </NumberedStep>
                 <NumberedStep n={3} title="Simpan nomor laporan IASC Anda.">
                   <label htmlFor="iasc" className="sr-only">Nomor laporan IASC</label>

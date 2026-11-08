@@ -1,6 +1,6 @@
 // Kunci chrome.storage (PRD 10.3).
 import { defaultRules, isUsableRuleSet } from '@scamguard/risk-engine';
-import type { RiskHistoryItem, RiskResult, RuleSet } from '@scamguard/shared';
+import type { ReportingSession, RiskHistoryItem, RiskResult, RuleSet } from '@scamguard/shared';
 import { HISTORY_LIMIT } from '../config';
 
 export interface LocalState {
@@ -10,6 +10,7 @@ export interface LocalState {
   history: RiskHistoryItem[];
   allowedDomains: Record<string, number>;
   onboardingDone: boolean;
+  activeReporting?: ReportingSession | null;
 }
 
 export interface TabResult {
@@ -71,4 +72,22 @@ export async function setTabResult(tabId: number, value: TabResult | null): Prom
   const key = `tab:${tabId}`;
   if (value) await chrome.storage.session.set({ [key]: value });
   else await chrome.storage.session.remove(key);
+}
+
+export async function getActiveReporting(): Promise<ReportingSession | null> {
+  const { activeReporting } = await getLocal('activeReporting');
+  if (!activeReporting) return null;
+  if (activeReporting.expiresAt && activeReporting.expiresAt < Date.now()) {
+    await clearActiveReporting();
+    return null;
+  }
+  return activeReporting;
+}
+
+export async function setActiveReporting(session: ReportingSession): Promise<void> {
+  await setLocal({ activeReporting: session });
+}
+
+export async function clearActiveReporting(): Promise<void> {
+  await setLocal({ activeReporting: null });
 }

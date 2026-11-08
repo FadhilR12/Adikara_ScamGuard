@@ -1,5 +1,5 @@
 // Skema pesan antar komponen ekstensi (PRD 10.2).
-import type { InputType, RiskResult } from '@scamguard/shared';
+import type { InputType, ReportingSession, RiskResult } from '@scamguard/shared';
 import type { TabResult } from './storage';
 
 export type CheckInputType = Exclude<InputType, 'page'>;
@@ -15,7 +15,11 @@ export type Message =
   | { type: 'OPEN_DETAIL' }
   | { type: 'OPEN_WEB'; path: string }
   | { type: 'REPORT'; targetType: 'url' | 'number' | 'text'; targetValue: string; kind: 'report' | 'false_positive' | 'helpful'; riskCheckId?: string }
-  | { type: 'EVENT'; name: string; props?: Record<string, unknown> };
+  | { type: 'EVENT'; name: string; props?: Record<string, unknown> }
+  | { type: 'START_REPORTING_SESSION'; session: ReportingSession }
+  | { type: 'GET_REPORTING_SESSION' }
+  | { type: 'CLEAR_REPORTING_SESSION' }
+  | { type: 'SAVE_IASC_REPORT_NO'; incidentId?: string; reportNo: string };
 
 export interface TabStatus {
   supported: boolean;
@@ -44,6 +48,10 @@ export interface Responses {
   OPEN_WEB: { ok: true };
   REPORT: { ok: boolean };
   EVENT: { ok: true };
+  START_REPORTING_SESSION: { ok: true };
+  GET_REPORTING_SESSION: ReportingSession | null;
+  CLEAR_REPORTING_SESSION: { ok: true };
+  SAVE_IASC_REPORT_NO: { ok: boolean };
 }
 
 export function send<M extends Message>(message: M): Promise<Responses[M['type']]> {
