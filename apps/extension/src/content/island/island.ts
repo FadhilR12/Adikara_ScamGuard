@@ -1,406 +1,586 @@
-// ScamGuard Dynamic Island Component (PRD 5 / KF-ISLAND-02, 03, 05, 06)
+// ScamGuard Co-Pilot Island (PRD 5 / KF-ISLAND-02, 03, 05, 06)
+// Kartu mengambang bergaya referensi "Extension Container": bisa digeser (posisi diingat),
+// dan tiap langkah IASC cukup satu tombol utama yang selalu menjalankan tugas berikutnya.
 import type { ReportingSession } from '@scamguard/shared';
 import { send } from '../../lib/messaging';
-import { base64ToFile, detectCurrentStep, executeAutofill } from './autofill';
+import { ensureFonts } from '../overlay/overlay';
+import {
+  attachFileToInput,
+  detectCurrentStep,
+  executeAutofill,
+  extractIascReportNo,
+  hasOpenDialog,
+  sessionFile,
+  visibleIascErrors,
+  type AutofillAction,
+  type AutofillResult,
+} from './autofill';
 import islandCss from './island.css?inline';
+
+const POS_KEY = 'scamguard_island_pos';
+const MB = 1024 * 1024;
+const EDGE = 8;
 
 const STEP_TITLES: Record<number, string> = {
   1: 'Data Pelapor',
   2: 'Pihak Terlapor',
-  3: 'Kronologi Kejadian',
-  4: 'Transaksi & Bukti',
+  3: 'Informasi Kejadian',
+  4: 'Informasi Transaksi',
   5: 'Kesediaan Melapor',
 };
+
+const STEP_NOTE: Record<number, string> = {
+  1: 'Isi data diri Anda sendiri (NIK/KTP), lalu klik "Lanjut" di formulir. ScamGuard tidak menyimpan data kependudukan Anda.',
+  2: 'Klik tombol di bawah. ScamGuard membuka jendela IASC dan mengisinya — Anda cukup memeriksa lalu klik "Simpan".',
+  3: 'Satu klik untuk mengisi waktu kejadian, kronologi, dan melampirkan Evidence Pack.',
+  4: 'Isi rekening Anda sendiri di formulir. Rekening pelaku, nominal, dan PDF diisi oleh ScamGuard.',
+  5: 'Centang pernyataan, ketik kode CAPTCHA, lalu klik "Kirim". Bagian ini sengaja tidak diisi otomatis.',
+};
+
+interface Task {
+  id: AutofillAction;
+  title: string;
+}
+
+const STEP_TASKS: Record<number, Task[]> = {
+  2: [
+    { id: 'terlapor', title: 'Kontak pelaku' },
+    { id: 'sumber', title: 'Sumber penipuan' },
+  ],
+  3: [{ id: 'kejadian', title: 'Kronologi & bukti PDF' }],
+  4: [{ id: 'transaksi', title: 'Rekening & transaksi pelaku' }],
+};
+
+const SVG: Record<string, string> = {
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  shieldCheck: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  minus: '<path d="M5 12h14"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  grip: '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  checkCircle: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13h4"/><path d="M10 17h4"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+};
+
+function svg(name: keyof typeof SVG, size = 18): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[name]}</svg>`;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+interface DragState {
+  startX: number;
+  startY: number;
+  originX: number;
+  originY: number;
+  moved: boolean;
+}
 
 export class ScamGuardIsland {
   private host: HTMLElement;
   private shadow: ShadowRoot;
+  private root: HTMLElement;
   private session: ReportingSession;
   private isExpanded = false;
+  private autoCollapsed = false;
+  private busy = false;
   private currentStep = 1;
   private capturedReportNo: string | null = null;
   private message = '';
+  private errorMessage = '';
+  private lastResult: AutofillResult | null = null;
+  private done = new Set<AutofillAction>();
   private observer: MutationObserver | null = null;
-  private swalObserver: MutationObserver | null = null;
+  private scheduled = false;
+  private dialogOpen = false;
+  private pos: { x: number; y: number } | null = null;
+  private drag: DragState | null = null;
+  private suppressClick = false;
+
+  private readonly onKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && this.isExpanded) this.setExpanded(false);
+  };
+  private readonly onDragOver = (e: DragEvent) => {
+    if (e.dataTransfer?.types.includes('application/x-scamguard-pdf')) e.preventDefault();
+  };
+  private readonly onDrop = (e: DragEvent) => this.handleDrop(e);
+  private readonly onPointerMove = (e: PointerEvent) => this.handlePointerMove(e);
+  private readonly onPointerUp = () => this.handlePointerUp();
+  private readonly onResize = () => this.clampToViewport();
 
   constructor(session: ReportingSession) {
     this.session = session;
     this.currentStep = detectCurrentStep();
+    this.capturedReportNo = session.result?.iascReportNo ?? null;
 
+    ensureFonts();
     this.host = document.createElement('scamguard-island');
     this.shadow = this.host.attachShadow({ mode: 'closed' });
 
-    // Inject styles
     const style = document.createElement('style');
     style.textContent = islandCss;
     this.shadow.appendChild(style);
 
-    const root = document.createElement('div');
-    root.className = 'island-root collapsed';
-    this.shadow.appendChild(root);
-
+    this.root = document.createElement('div');
+    this.root.className = 'island-root collapsed';
+    this.shadow.appendChild(this.root);
     document.body.appendChild(this.host);
 
-    this.initListeners();
-    this.initStepObserver();
-    this.initSweetAlertInterceptor();
-    this.initValidationFeedbackWatcher();
-    this.render();
+    // Handler terdelegasi, dipasang sekali.
+    this.root.addEventListener('click', (e) => this.handleClick(e));
+    this.root.addEventListener('dragstart', (e) => this.handleDragStart(e));
+    this.root.addEventListener('pointerdown', (e) => this.handlePointerDown(e));
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerUp);
+    window.addEventListener('resize', this.onResize);
+    window.addEventListener('keydown', this.onKeydown);
+    document.addEventListener('dragover', this.onDragOver);
+    document.addEventListener('drop', this.onDrop);
 
-    // Auto-expand sejenak saat pertama kali muncul agar user sadar
+    this.initPageObserver();
+    this.render();
+    void this.restorePosition();
+
+    // Buka otomatis sekali saat muncul agar user langsung melihat langkahnya.
     window.setTimeout(() => {
-      this.isExpanded = true;
-      this.render();
+      if (!hasOpenDialog() && !this.capturedReportNo) this.setExpanded(true);
     }, 400);
   }
 
-  private initListeners(): void {
-    // Pastikan hidden phone numbers terisi saat submit di Step 1 web IASC asli
-    document.addEventListener(
-      'submit',
-      (e) => {
-        const target = e.target as HTMLElement;
-        if (target && target.id === 'form-scam-step1') {
-          const kode = document.querySelector<HTMLSelectElement>('select[name="kode_nomor_telepon_pelapor"]')?.value || '62';
-          const no = document.querySelector<HTMLInputElement>('input[name="no_nomor_telepon_pelapor"]')?.value || '';
-          const hiddenPhone = document.querySelector<HTMLInputElement>('input[name="nomor_telepon_pelapor"]');
-          if (hiddenPhone && no) hiddenPhone.value = kode + no;
+  /* ---------------- Posisi & drag ---------------- */
 
-          const konfKode = document.querySelector<HTMLSelectElement>('select[name="konfirmasi_kode_nomor_telepon_pelapor"]')?.value || '62';
-          const konfNo = document.querySelector<HTMLInputElement>('input[name="konfirmasi_no_nomor_telepon_pelapor"]')?.value || '';
-          const hiddenKonf = document.querySelector<HTMLInputElement>('input[name="konfirmasi_nomor_telepon_pelapor"]');
-          if (hiddenKonf && konfNo) hiddenKonf.value = konfKode + konfNo;
-        }
-      },
-      true
-    );
-
-    // Esc untuk menutup expanded
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.isExpanded) {
-        this.isExpanded = false;
-        this.render();
-      }
-    });
-
-    // Dengarkan drop global di halaman untuk membantu melampirkan file PDF jika di-drag
-    document.addEventListener('dragover', (e) => {
-      if (e.dataTransfer?.types.includes('application/x-scamguard-pdf')) {
-        e.preventDefault();
-      }
-    });
-
-    document.addEventListener('drop', (e) => {
-      if (e.dataTransfer?.types.includes('application/x-scamguard-pdf')) {
-        e.preventDefault();
-        const target = e.target as HTMLElement;
-        const fileInput = target.closest('input[type="file"]') || document.querySelector<HTMLInputElement>('input[type="file"]');
-        if (fileInput && fileInput instanceof HTMLInputElement && this.session.evidenceFile) {
-          const file = base64ToFile(
-            this.session.evidenceFile.base64 || '',
-            this.session.evidenceFile.fileName || 'Evidence_Pack.pdf',
-            this.session.evidenceFile.mimeType || 'application/pdf'
-          );
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          fileInput.files = dt.files;
-          fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-          this.message = 'Evidence Pack PDF berhasil dilampirkan lewat drag & drop!';
-          this.render();
-        }
-      }
-    });
+  private async restorePosition(): Promise<void> {
+    try {
+      const stored = (await chrome.storage.local.get(POS_KEY))[POS_KEY] as { x: number; y: number } | undefined;
+      if (stored && Number.isFinite(stored.x) && Number.isFinite(stored.y)) this.applyPosition(stored.x, stored.y);
+    } catch {
+      /* posisi default (kanan atas) */
+    }
   }
 
-  /** Pantau perubahan step jika terjadi navigasi URL atau perubahan form */
-  private initStepObserver(): void {
-    let lastStep = this.currentStep;
+  private applyPosition(x: number, y: number): void {
+    const w = this.root.offsetWidth || 200;
+    const h = this.root.offsetHeight || 48;
+    const nx = Math.min(Math.max(EDGE, x), Math.max(EDGE, window.innerWidth - w - EDGE));
+    const ny = Math.min(Math.max(EDGE, y), Math.max(EDGE, window.innerHeight - h - EDGE));
+    this.pos = { x: nx, y: ny };
+    this.host.style.left = `${nx}px`;
+    this.host.style.top = `${ny}px`;
+    this.host.style.right = 'auto';
+  }
+
+  private clampToViewport(): void {
+    if (this.pos) this.applyPosition(this.pos.x, this.pos.y);
+  }
+
+  private handlePointerDown(e: PointerEvent): void {
+    if (e.button !== 0) return;
+    const target = e.target as Element | null;
+    const isHandle = !!target?.closest('[data-drag-handle]') || this.root.classList.contains('collapsed');
+    if (!target || !isHandle) return;
+    if (target.closest('button')) return; // tombol di header tetap bisa diklik
+    const rect = this.root.getBoundingClientRect();
+    this.drag = { startX: e.clientX, startY: e.clientY, originX: rect.left, originY: rect.top, moved: false };
+  }
+
+  private handlePointerMove(e: PointerEvent): void {
+    const d = this.drag;
+    if (!d) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (!d.moved && Math.hypot(dx, dy) < 4) return;
+    if (!d.moved) {
+      d.moved = true;
+      this.root.classList.add('dragging');
+    }
+    e.preventDefault();
+    this.applyPosition(d.originX + dx, d.originY + dy);
+  }
+
+  private handlePointerUp(): void {
+    const d = this.drag;
+    this.drag = null;
+    if (!d?.moved) return;
+    this.root.classList.remove('dragging');
+    this.suppressClick = true;
+    window.setTimeout(() => (this.suppressClick = false), 0);
+    if (this.pos) void chrome.storage.local.set({ [POS_KEY]: this.pos }).catch(() => {});
+  }
+
+  /* ---------------- Observer halaman ---------------- */
+
+  private initPageObserver(): void {
     this.observer = new MutationObserver(() => {
-      const nextStep = detectCurrentStep();
-      if (nextStep !== lastStep) {
-        lastStep = nextStep;
-        this.currentStep = nextStep;
-        this.message = '';
-        this.render();
-      }
+      if (this.scheduled) return;
+      this.scheduled = true;
+      requestAnimationFrame(() => {
+        this.scheduled = false;
+        this.syncWithPage();
+      });
     });
-
-    this.observer.observe(document.body, { childList: true, subtree: true });
+    this.observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
   }
 
-  /** Interseptor SweetAlert2 untuk menangkap nomor laporan IASC setelah submit */
-  private initSweetAlertInterceptor(): void {
-    this.swalObserver = new MutationObserver(() => {
-      if (this.capturedReportNo) return;
+  private syncWithPage(): void {
+    let dirty = false;
 
-      const swalContainer = document.querySelector('.swal2-container, .swal2-popup');
-      if (!swalContainer) return;
+    const step = detectCurrentStep();
+    if (step !== this.currentStep) {
+      this.currentStep = step;
+      this.message = '';
+      this.lastResult = null;
+      dirty = true;
+    }
 
-      const text = swalContainer.textContent || '';
-      // Pola IASC: "Laporan Anda telah diajukan dengan nomor laporan : [NOMOR]"
-      const match = text.match(/nomor laporan\s*[:\n]\s*([A-Za-z0-9_-]{5,30})/i) ||
-                    text.match(/([A-Z0-9]{4,10}-\d{4,}-\d+)/i) ||
-                    text.match(/#?(\d{10,20})/);
-
-      if (match && match[1]) {
-        const reportNo = match[1].trim();
+    if (!this.capturedReportNo) {
+      const reportNo = extractIascReportNo();
+      if (reportNo) {
         this.capturedReportNo = reportNo;
+        dirty = true;
+        void send({ type: 'SAVE_IASC_REPORT_NO', reportNo, incidentId: this.session.incidentId }).catch(() => {});
+      }
+    }
+
+    // Jendela IASC terbuka → kecilkan agar tidak menutupi isinya; buka lagi setelah ditutup.
+    const open = hasOpenDialog();
+    if (open !== this.dialogOpen) {
+      this.dialogOpen = open;
+      if (open && this.isExpanded && !this.capturedReportNo) {
+        this.isExpanded = false;
+        this.autoCollapsed = true;
+        dirty = true;
+      } else if (!open && this.autoCollapsed) {
+        this.autoCollapsed = false;
         this.isExpanded = true;
-        this.render();
-
-        // Simpan nomor laporan balik ke ScamGuard Backend & Storage
-        void send({
-          type: 'SAVE_IASC_REPORT_NO',
-          reportNo,
-          incidentId: this.session.incidentId,
-        });
+        dirty = true;
       }
-    });
+    }
 
-    this.swalObserver.observe(document.body, { childList: true, subtree: true });
+    const errors = visibleIascErrors();
+    const errMsg = errors.length ? `IASC meminta perbaikan: ${errors.slice(0, 2).join(' • ')}` : '';
+    if (errMsg !== this.errorMessage) {
+      this.errorMessage = errMsg;
+      if (errMsg && this.dialogOpen) this.autoCollapsed = true;
+      else if (errMsg) this.isExpanded = true;
+      dirty = true;
+    }
+
+    if (dirty) this.render();
   }
 
-  /** Pantau error validasi IASC (.invalid-feedback / .is-invalid) dan tampilkan di Island */
-  private initValidationFeedbackWatcher(): void {
-    const errObserver = new MutationObserver(() => {
-      const errNodes = Array.from(document.querySelectorAll('.invalid-feedback'));
-      const activeErrors = errNodes
-        .map((n) => n.textContent?.trim())
-        .filter((t): t is string => Boolean(t && t.length > 0));
+  /* ---------------- Interaksi ---------------- */
 
-      if (activeErrors.length > 0) {
-        const unique = [...new Set(activeErrors)];
-        const newMsg = `⚠️ IASC Menolak: ${unique.slice(0, 2).join(' • ')}`;
-        if (this.message !== newMsg) {
-          this.message = newMsg;
-          this.isExpanded = true;
-          this.render();
-        }
-      }
-    });
-
-    errObserver.observe(document.body, { childList: true, subtree: true });
+  private setExpanded(expanded: boolean): void {
+    this.isExpanded = expanded;
+    this.autoCollapsed = false;
+    this.render();
   }
 
-  public render(): void {
-    const root = this.shadow.querySelector('.island-root');
-    if (!root) return;
-
-    if (this.capturedReportNo) {
-      root.className = 'island-root expanded success';
-      root.innerHTML = this.renderSuccessTemplate();
-      this.bindSuccessEvents(root);
+  private handleClick(e: MouseEvent): void {
+    if (this.suppressClick) return;
+    const btn = (e.target as Element | null)?.closest<HTMLElement>('[data-action]');
+    const action = btn?.dataset.action;
+    if (!action) {
+      if (!this.isExpanded && !this.capturedReportNo) this.setExpanded(true);
       return;
     }
-
-    if (this.isExpanded) {
-      root.className = 'island-root expanded';
-      root.innerHTML = this.renderExpandedTemplate();
-      this.bindExpandedEvents(root);
-    } else {
-      root.className = 'island-root collapsed';
-      root.innerHTML = this.renderCollapsedTemplate();
-      this.bindCollapsedEvents(root);
+    e.stopPropagation();
+    switch (action) {
+      case 'expand':
+        this.setExpanded(true);
+        return;
+      case 'collapse':
+        this.setExpanded(false);
+        return;
+      case 'close-success':
+        void send({ type: 'CLEAR_REPORTING_SESSION' }).catch(() => {});
+        this.destroy();
+        return;
+      case 'download':
+        this.downloadPdf();
+        return;
+      default:
+        void this.runAutofill(action as AutofillAction);
     }
   }
 
-  private renderCollapsedTemplate(): string {
-    const stepLabel = STEP_TITLES[this.currentStep] || `Step ${this.currentStep}`;
+  private async runAutofill(action: AutofillAction): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.message = '';
+    this.render();
+    try {
+      const res = await executeAutofill(this.session, action);
+      this.lastResult = res;
+      this.message = res.message;
+      if (res.ok && action !== 'captcha') this.done.add(action);
+    } catch (err) {
+      console.warn('[ScamGuard Island] autofill gagal:', err);
+      this.lastResult = null;
+      this.message = 'Autofill gagal. Silakan isi field secara manual.';
+    } finally {
+      this.busy = false;
+      this.render();
+    }
+  }
+
+  private downloadPdf(): void {
+    const ef = this.session.evidenceFile;
+    if (!ef?.base64) return;
+    const link = document.createElement('a');
+    link.href = ef.base64.startsWith('data:') ? ef.base64 : `data:application/pdf;base64,${ef.base64}`;
+    link.download = ef.fileName || 'Evidence_Pack.pdf';
+    link.click();
+  }
+
+  /** AC-02.4 / AC-05.3: chip PDF bisa di-drag ke kolom unggah. */
+  private handleDragStart(e: DragEvent): void {
+    const chip = (e.target as Element | null)?.closest('[data-file-chip]');
+    if (!chip || !e.dataTransfer) return;
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('application/x-scamguard-pdf', 'true');
+    e.dataTransfer.setData('text/plain', this.session.evidenceFile?.fileName ?? 'Evidence_Pack.pdf');
+    const file = sessionFile(this.session);
+    if (file) {
+      try {
+        e.dataTransfer.items.add(file);
+      } catch {
+        /* sebagian browser tidak mengizinkan menambah File saat dragstart */
+      }
+    }
+  }
+
+  private defaultFileInput(): HTMLInputElement | null {
+    const inModal = document.querySelector<HTMLInputElement>('.modal.show input[type="file"]');
+    if (inModal) return inModal;
+    if (this.currentStep === 3) return document.querySelector('input[type="file"][name="file_bukti_pendukung_kejadian"]');
+    return null;
+  }
+
+  private handleDrop(e: DragEvent): void {
+    if (!e.dataTransfer?.types.includes('application/x-scamguard-pdf')) return;
+    e.preventDefault();
+    const target = e.target as Element | null;
+    const direct = target?.closest('input[type="file"]');
+    const zone = target?.closest('[data-dropzone], .dropzone, .col-12, .form-group, .mb-3')?.querySelector('input[type="file"]');
+    const input = (direct ?? (zone as Element | null) ?? this.defaultFileInput()) as HTMLInputElement | null;
+    const file = sessionFile(this.session);
+    if (!input || !(input instanceof HTMLInputElement)) {
+      this.message = 'Lepaskan chip PDF tepat di kolom unggah bukti.';
+    } else if (!file) {
+      this.message = 'PDF Evidence Pack belum tersedia.';
+    } else {
+      const max = input.name.startsWith('detail[') ? 5 * MB : 2 * MB;
+      if (file.size > max) this.message = `PDF melebihi batas IASC ${max / MB}MB untuk kolom ini.`;
+      else if (attachFileToInput(input, file)) this.message = 'Evidence Pack berhasil dilampirkan.';
+      else this.message = 'Browser menolak lampiran. Unduh PDF lalu unggah manual.';
+    }
+    this.lastResult = null;
+    this.render();
+  }
+
+  /* ---------------- Render ---------------- */
+
+  public render(): void {
+    if (this.capturedReportNo) {
+      this.root.className = 'island-root expanded';
+      this.root.innerHTML = this.renderSuccess();
+    } else if (this.isExpanded) {
+      this.root.className = 'island-root expanded';
+      this.root.innerHTML = this.renderExpanded();
+    } else {
+      this.root.className = 'island-root collapsed';
+      this.root.innerHTML = this.renderCollapsed();
+    }
+    // Ukuran berubah (pill ↔ kartu) → pastikan tetap di dalam layar.
+    requestAnimationFrame(() => this.clampToViewport());
+  }
+
+  private tasks(): Task[] {
+    return STEP_TASKS[this.currentStep] ?? [];
+  }
+
+  private nextTask(): Task | undefined {
+    return this.tasks().find((t) => !this.done.has(t.id));
+  }
+
+  private renderCollapsed(): string {
+    const step = this.currentStep;
+    const next = this.nextTask();
     return `
-      <div class="pill-left">
-        <div class="shield-badge">🛡️</div>
-        <span class="pill-title">ScamGuard</span>
-        <span class="pill-step">Step ${this.currentStep}: ${stepLabel}</span>
+      <div class="logo" data-drag-handle>${svg('shieldCheck', 18)}</div>
+      <div class="pill-text" data-drag-handle>
+        <span class="pill-title">ScamGuard Co-Pilot</span>
+        <span class="pill-sub">Langkah ${step} dari 5 · ${escapeHtml(STEP_TITLES[step])}</span>
       </div>
-      <div class="pill-right">
-        ${this.session.evidenceFile ? '<span class="pdf-indicator">📄 PDF Siap</span>' : ''}
-        <span class="chevron-icon">▼</span>
-      </div>
+      ${next ? '<span class="badge" data-drag-handle>✨ Siap isi</span>' : ''}
+      <button class="pill-expand" data-action="expand" title="Buka">${svg('chevronDown', 18)}</button>
     `;
   }
 
-  private renderExpandedTemplate(): string {
-    const target = this.session.target;
-    const lossFmt = target.lossAmount ? `Rp ${target.lossAmount.toLocaleString('id-ID')}` : 'Belum diisi';
-    const accFmt = target.accountNumber ? `${target.bankName || 'Bank'} ${target.accountNumber}` : '—';
-    const stepTitle = STEP_TITLES[this.currentStep] || `Step ${this.currentStep}`;
-
-    // Guidance text per step
-    let guidanceText = '';
-    let actionBtnText = `✨ Isi Otomatis ${stepTitle}`;
-
-    if (this.currentStep === 1) {
-      guidanceText = 'Demi privasi dan UU Pelindungan Data Pribadi (UU PDP), NIK & KTP silakan diisi langsung oleh Anda. ScamGuard tidak menyimpan data identitas Anda.';
-      actionBtnText = 'ℹ️ Data Pribadi Diisi Mandiri';
-    } else if (this.currentStep === 2) {
-      guidanceText = 'ScamGuard siap mengisikan kontak dan identitas terlapor (pelaku penipuan).';
-      actionBtnText = '✨ Isi Kontak & Info Pelaku';
-    } else if (this.currentStep === 3) {
-      guidanceText = 'Kronologi terstruktur hasil generate Evidence Pack siap ditempelkan langsung ke textarea kronologi.';
-      actionBtnText = '✨ Tempel Kronologi Rapi';
-    } else if (this.currentStep === 4) {
-      guidanceText = 'Rekening penipu, nominal kerugian, dan berkas Evidence Pack (PDF) siap disematkan ke formulir.';
-      actionBtnText = '✨ Isi Data Transaksi & Lampirkan PDF';
-    } else if (this.currentStep === 5) {
-      guidanceText = 'Tinjau kembali data laporan, ketik kode CAPTCHA di bawah, lalu klik tombol Kirim.';
-      actionBtnText = '✨ Centang Kesediaan Melapor';
+  private renderNote(): string {
+    const r = this.lastResult;
+    let kind = '';
+    let icon: keyof typeof SVG = 'info';
+    let text = STEP_NOTE[this.currentStep] ?? '';
+    if (this.errorMessage) {
+      kind = 'warn';
+      icon = 'alert';
+      text = this.errorMessage;
+    } else if (this.message) {
+      text = this.message;
+      if (r && r.ok && r.pending.length === 0) [kind, icon] = ['ok', 'checkCircle'];
+      else if (r && !r.ok) [kind, icon] = ['warn', 'alert'];
+      else if (r) [kind, icon] = ['ok', 'checkCircle'];
+    } else if (this.tasks().length && !this.nextTask()) {
+      kind = 'ok';
+      icon = 'checkCircle';
+      text = 'Semua bagian langkah ini sudah diisi. Periksa, lalu klik "Simpan"/"Lanjut" di formulir IASC.';
     }
+    return `<div class="note ${kind}">${svg(icon, 18)}<span>${escapeHtml(text)}</span></div>`;
+  }
+
+  private renderTasks(): string {
+    const tasks = this.tasks();
+    if (!tasks.length) return '';
+    const next = this.nextTask();
+    return `
+      <div class="tasks">
+        ${tasks
+          .map((t) => {
+            const isDone = this.done.has(t.id);
+            const state = isDone ? 'done' : t === next ? 'next' : '';
+            return `
+              <div class="task ${state}">
+                <span class="task-dot">${isDone ? svg('check', 12) : ''}</span>
+                <span class="task-title">${escapeHtml(t.title)}</span>
+                ${isDone ? `<button class="task-redo" data-action="${t.id}" ${this.busy ? 'disabled' : ''}>Ulangi</button>` : ''}
+              </div>`;
+          })
+          .join('')}
+      </div>`;
+  }
+
+  private renderResult(): string {
+    const r = this.lastResult;
+    if (!r || this.errorMessage || (!r.filledFields.length && !r.pending.length)) return '';
+    return `
+      <div class="result">
+        ${r.filledFields.length ? `<div><b>✓ Terisi:</b> ${r.filledFields.map(escapeHtml).join(', ')}</div>` : ''}
+        ${r.pending.length ? `<div><b>✎ Perlu Anda isi:</b> ${r.pending.map(escapeHtml).join(', ')}</div>` : ''}
+      </div>`;
+  }
+
+  private renderPrimary(): string {
+    const disabled = this.busy ? 'disabled' : '';
+    if (this.busy) return `<button class="btn-primary" disabled>Mengisi formulir IASC…</button>`;
+    if (this.currentStep === 1) return `<button class="btn-secondary" data-action="collapse">Mengerti, saya isi sendiri</button>`;
+    if (this.currentStep === 5) return `<button class="btn-primary" data-action="captcha" ${disabled}>${svg('search', 18)} Ke kolom CAPTCHA</button>`;
+    const next = this.nextTask();
+    if (!next) return '';
+    const tasks = this.tasks();
+    const counter = tasks.length > 1 ? ` (${tasks.indexOf(next) + 1}/${tasks.length})` : '';
+    return `<button class="btn-primary" data-action="${next.id}" ${disabled} title="${escapeHtml(next.title)}">${svg('sparkles', 18)} Isi Otomatis${counter}</button>`;
+  }
+
+  private renderExpanded(): string {
+    const step = this.currentStep;
+    const t = this.session.target;
+    const ef = this.session.evidenceFile;
+    const loss = t.lossAmount ? `Rp ${t.lossAmount.toLocaleString('id-ID')}` : '—';
+    const acc = t.accountNumber ? `${t.bankName ? `${t.bankName} · ` : ''}${t.accountNumber}` : '—';
+    const size = ef?.sizeBytes ? `${Math.max(1, Math.round(ef.sizeBytes / 1024))} KB` : '';
 
     return `
-      <div class="card-header">
-        <div class="card-brand">
-          <div class="shield-badge">🛡️</div>
-          <div class="brand-text-col">
-            <span class="brand-title">ScamGuard Co-Pilot</span>
-            <span class="brand-sub">Kasus #${this.session.incidentCode || 'SG-2026'}</span>
+      <div class="card-header" data-drag-handle title="Geser untuk memindahkan">
+        <div class="logo">${svg('shieldCheck', 18)}</div>
+        <div class="brand">
+          <span class="brand-title">ScamGuard Co-Pilot</span>
+          <span class="brand-sub">Lapor IASC · #${escapeHtml(this.session.incidentCode || '—')}</span>
+        </div>
+        <span class="drag-hint">${svg('grip', 16)}</span>
+        <button class="icon-btn" data-action="collapse" title="Kecilkan">${svg('minus', 18)}</button>
+      </div>
+
+      <div class="card-body">
+        <div>
+          <div class="progress-head">
+            <span class="progress-title">${escapeHtml(STEP_TITLES[step])}</span>
+            <span class="progress-count">Langkah ${step} dari 5</span>
+          </div>
+          <div class="progress-bar">
+            ${[1, 2, 3, 4, 5].map((n) => `<span class="${n === step ? 'active' : n < step ? 'done' : ''}"></span>`).join('')}
           </div>
         </div>
-        <button class="close-btn" id="btn-close" title="Kecilkan">✕</button>
-      </div>
 
-      <!-- Step Tracker 1 - 5 -->
-      <div class="step-tracker">
-        ${[1, 2, 3, 4, 5]
-          .map(
-            (n) => `
-          <div class="step-node ${n === this.currentStep ? 'active' : n < this.currentStep ? 'done' : ''}">
-            <div class="step-num">${n < this.currentStep ? '✓' : n}</div>
-            <span>${STEP_TITLES[n]?.split(' ')[0]}</span>
+        ${this.renderNote()}
+        ${this.renderTasks()}
+        ${this.renderPrimary()}
+        ${this.renderResult()}
+
+        <div>
+          <div class="section-label" style="margin-bottom:8px">Data siap isi</div>
+          <div class="data-rows">
+            <div class="data-row"><span>Rekening pelaku</span><span>${escapeHtml(acc)}</span></div>
+            <div class="data-row"><span>Kerugian</span><span>${escapeHtml(loss)}</span></div>
           </div>
-        `
-          )
-          .join('')}
-      </div>
-
-      <!-- Detail Insiden -->
-      <div class="incident-info-box">
-        <div class="info-row">
-          <span class="info-label">Rekening Penipu:</span>
-          <span class="info-val">${accFmt}</span>
         </div>
-        <div class="info-row">
-          <span class="info-label">Kerugian:</span>
-          <span class="info-val">${lossFmt}</span>
-        </div>
-      </div>
 
-      <!-- Draggable PDF Chip -->
-      ${
-        this.session.evidenceFile
-          ? `
-        <div class="file-chip-container" id="draggable-pdf" draggable="true" title="Drag ke area upload berkas IASC">
-          <div class="chip-left">
-            <span>📄</span>
-            <div>
-              <div class="chip-name">${this.session.evidenceFile.fileName}</div>
-              <div class="chip-size">${Math.round((this.session.evidenceFile.sizeBytes || 120000) / 1024)} KB • PDF Siap</div>
-            </div>
-          </div>
-          <span class="chip-drag-hint">⇄ Drag ke Form</span>
-        </div>
-      `
-          : ''
-      }
-
-      <!-- Step Guidance Message -->
-      <div class="guidance-box ${this.currentStep === 1 ? 'info' : ''}">
-        <span>${this.currentStep === 1 ? '🛡️' : '💡'}</span>
-        <span>${this.message || guidanceText}</span>
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="island-actions">
         ${
-          this.currentStep !== 1
-            ? `<button class="btn-autofill" id="btn-autofill">${actionBtnText}</button>`
-            : `<button class="btn-secondary" id="btn-autofill-info">Mengerti, Isi Mandiri Data Diri</button>`
-        }
-        ${
-          this.session.evidenceFile?.base64
-            ? `<button class="btn-secondary" id="btn-download-pdf">📥 Unduh PDF Evidence Pack</button>`
+          ef
+            ? `<div class="file-chip" data-file-chip draggable="true" title="Seret ke kolom unggah bukti IASC">
+                <span class="file-icon">${svg('file', 18)}</span>
+                <span class="file-meta">
+                  <span class="file-name">${escapeHtml(ef.fileName)}</span>
+                  <span class="file-size">${ef.base64 ? `${size ? `${size} · ` : ''}Seret ke kolom unggah` : 'PDF belum tersedia'}</span>
+                </span>
+                ${ef.base64 ? `<button class="icon-btn" data-action="download" title="Unduh PDF">${svg('download', 18)}</button>` : ''}
+              </div>`
             : ''
         }
       </div>
+
+      <div class="card-footer">${svg('lock', 14)} Data pribadi Anda tidak disimpan ScamGuard.</div>
     `;
   }
 
-  private renderSuccessTemplate(): string {
+  private renderSuccess(): string {
     return `
-      <div class="success-badge">✓</div>
-      <div class="success-title">Laporan Berhasil Terkirim ke IASC!</div>
-      <div class="success-report-no">${this.capturedReportNo}</div>
-      <div class="guidance-box">
-        <span>🎉</span>
-        <span>Nomor laporan IASC telah ditangkap dan otomatis disimpan ke riwayat kasus ScamGuard Anda.</span>
+      <div class="card-header" data-drag-handle>
+        <div class="logo">${svg('shieldCheck', 18)}</div>
+        <div class="brand">
+          <span class="brand-title">ScamGuard Co-Pilot</span>
+          <span class="brand-sub">Lapor IASC · #${escapeHtml(this.session.incidentCode || '—')}</span>
+        </div>
       </div>
-      <button class="btn-secondary" id="btn-close-success">Tutup Pendamping</button>
+      <div class="success-body">
+        <div class="success-icon">${svg('check', 26)}</div>
+        <div class="success-title">Laporan terkirim!</div>
+        <div class="report-no">${escapeHtml(this.capturedReportNo)}</div>
+        <div class="success-desc">Nomor laporan IASC tersimpan otomatis ke kasus ScamGuard Anda.</div>
+        <button class="btn-secondary" data-action="close-success">Tutup</button>
+      </div>
     `;
-  }
-
-  private bindCollapsedEvents(root: Element): void {
-    root.addEventListener('click', () => {
-      this.isExpanded = true;
-      this.render();
-    });
-  }
-
-  private bindExpandedEvents(root: Element): void {
-    root.querySelector('#btn-close')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.isExpanded = false;
-      this.render();
-    });
-
-    root.querySelector('#btn-autofill')?.addEventListener('click', async () => {
-      const res = await executeAutofill(this.session, this.currentStep);
-      this.message = res.message;
-      this.render();
-    });
-
-    root.querySelector('#btn-autofill-info')?.addEventListener('click', () => {
-      this.isExpanded = false;
-      this.render();
-    });
-
-    root.querySelector('#btn-download-pdf')?.addEventListener('click', () => {
-      if (!this.session.evidenceFile?.base64) return;
-      const link = document.createElement('a');
-      link.href = this.session.evidenceFile.base64.startsWith('data:')
-        ? this.session.evidenceFile.base64
-        : `data:application/pdf;base64,${this.session.evidenceFile.base64}`;
-      link.download = this.session.evidenceFile.fileName || 'Evidence_Pack.pdf';
-      link.click();
-    });
-
-    // Draggable chip handling
-    const dragChip = root.querySelector<HTMLElement>('#draggable-pdf');
-    if (dragChip && this.session.evidenceFile) {
-      dragChip.addEventListener('dragstart', (e) => {
-        if (!e.dataTransfer || !this.session.evidenceFile) return;
-        e.dataTransfer.setData('application/x-scamguard-pdf', 'true');
-        e.dataTransfer.setData('text/plain', this.session.evidenceFile.fileName);
-
-        try {
-          const file = base64ToFile(
-            this.session.evidenceFile.base64 || '',
-            this.session.evidenceFile.fileName,
-            this.session.evidenceFile.mimeType
-          );
-          e.dataTransfer.items.add(file);
-        } catch {}
-      });
-    }
-  }
-
-  private bindSuccessEvents(root: Element): void {
-    root.querySelector('#btn-close-success')?.addEventListener('click', () => {
-      this.destroy();
-    });
   }
 
   public destroy(): void {
     this.observer?.disconnect();
-    this.swalObserver?.disconnect();
+    window.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
+    window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('keydown', this.onKeydown);
+    document.removeEventListener('dragover', this.onDragOver);
+    document.removeEventListener('drop', this.onDrop);
     this.host.remove();
   }
 }

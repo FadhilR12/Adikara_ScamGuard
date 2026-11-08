@@ -16,10 +16,18 @@ export type Message =
   | { type: 'OPEN_WEB'; path: string }
   | { type: 'REPORT'; targetType: 'url' | 'number' | 'text'; targetValue: string; kind: 'report' | 'false_positive' | 'helpful'; riskCheckId?: string }
   | { type: 'EVENT'; name: string; props?: Record<string, unknown> }
-  | { type: 'START_REPORTING_SESSION'; session: ReportingSession }
+  | { type: 'START_REPORTING_SESSION'; session: ReportingSession; openUrl?: string }
   | { type: 'GET_REPORTING_SESSION' }
   | { type: 'CLEAR_REPORTING_SESSION' }
-  | { type: 'SAVE_IASC_REPORT_NO'; incidentId?: string; reportNo: string };
+  | { type: 'SAVE_IASC_REPORT_NO'; incidentId?: string; reportNo: string }
+  | { type: 'PAGE_SET'; ops: PageSetOp[] };
+
+/** Operasi yang dijalankan di MAIN world halaman (akses jQuery/select2/flatpickr milik IASC). */
+export interface PageSetOp {
+  kind: 'flatpickr' | 'select2';
+  selector: string;
+  value: string;
+}
 
 export interface TabStatus {
   supported: boolean;
@@ -52,6 +60,7 @@ export interface Responses {
   GET_REPORTING_SESSION: ReportingSession | null;
   CLEAR_REPORTING_SESSION: { ok: true };
   SAVE_IASC_REPORT_NO: { ok: boolean };
+  PAGE_SET: { ok: boolean; results: boolean[] };
 }
 
 export function send<M extends Message>(message: M): Promise<Responses[M['type']]> {

@@ -220,5 +220,38 @@ export async function generateEvidencePack(incident: Incident, files: PackFile[]
     doc.text(`Halaman ${p} dari ${total}  -  ID ${incident.code}`, PAGE_W / 2, PAGE_H - 10, { align: 'center' });
   }
 
-  return doc.output('blob');
+  return new Blob([stripPdfActions(new Uint8Array(doc.output('arraybuffer')))], { type: 'application/pdf' });
+}
+
+const ACTION_KEYS = ['/OpenAction', '/AA', '/JavaScript', '/JS', '/Launch'];
+
+/**
+ * jsPDF selalu menulis `/OpenAction [3 0 R /FitH null]` (zoom awal) di objek Catalog. Portal IASC
+ * menolak PDF yang mengandung action/script, jadi entri action di Catalog ditimpa spasi dengan panjang
+ * yang sama (offset xref tetap valid). Konten halaman tidak disentuh.
+ */
+export function stripPdfActions(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(bytes);
+  const text = bytesToLatin1(out);
+  const catalogKey = /\/Type\s*\/Catalog(?![A-Za-z])/g;
+  for (let m = catalogKey.exec(text); m; m = catalogKey.exec(text)) {
+    // Batasi ke objek Catalog: dari "N 0 obj" terdekat sebelum key sampai "endobj" berikutnya.
+    const start = text.lastIndexOf(' obj', m.index);
+    const end = text.indexOf('endobj', m.index);
+    if (start < 0 || end < 0) continue;
+    const body = text.slice(start, end);
+    for (const key of ACTION_KEYS) {
+      const re = new RegExp(`\\${key}(?![A-Za-z])\\s*(\\[[^\\]]*\\]|<<[^>]*>>|\\d+\\s+\\d+\\s+R)`, 'g');
+      for (let a = re.exec(body); a; a = re.exec(body)) {
+        out.fill(0x20, start + a.index, start + a.index + a[0].length);
+      }
+    }
+  }
+  return out;
+}
+
+function bytesToLatin1(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return s;
 }

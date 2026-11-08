@@ -1,8 +1,8 @@
 // Content script ScamGuard (PRD 10.4): membaca isi halaman, menjalankan risk engine
 // langsung di halaman, dan menampilkan "Tahan Dulu" bila skornya tinggi.
 import { analyze } from '@scamguard/risk-engine';
-import type { RiskResult } from '@scamguard/shared';
-import { ALLOW_HOURS, OVERLAY_SCORE, OVERLAY_SCORE_WITH_PAYMENT } from '../config';
+import type { ReportingSession, RiskResult } from '@scamguard/shared';
+import { ALLOW_HOURS, OVERLAY_SCORE, OVERLAY_SCORE_WITH_PAYMENT, WEB_APP_URL } from '../config';
 import { send } from '../lib/messaging';
 import { getLocal, getRules } from '../lib/storage';
 import { extractPage } from './extract';
@@ -20,23 +20,47 @@ let islandInstance: ScamGuardIsland | null = null;
 export function isIascPage(): boolean {
   const host = location.hostname.toLowerCase();
   const path = location.pathname.toLowerCase();
-  return host.includes('iasc.ojk.go.id') || path.startsWith('/demo/iasc-portal') || path.includes('/guest/laporanv2');
+  return host === 'iasc.ojk.go.id' || path.startsWith('/demo/iasc-portal') || path.includes('/guest/laporanv2');
 }
 
+const WEB_ORIGIN = (() => {
+  try {
+    return new URL(WEB_APP_URL).origin;
+  } catch {
+    return '';
+  }
+})();
+const isWebApp = location.origin === WEB_ORIGIN;
+
 async function checkAndMountIsland(): Promise<void> {
-  if (!isIascPage()) return;
+  if (!isIascPage() || islandInstance) return;
   const session = await send({ type: 'GET_REPORTING_SESSION' }).catch(() => null);
   if (session && !islandInstance) {
     islandInstance = mountIsland(session);
   }
 }
 
-// Dengarkan event dari Web ScamGuard (mis. saat user klik "Lanjut ke IASC")
+// KF-ISLAND-01: terima payload dari Web ScamGuard (klik "Buka IASC dengan Co-Pilot").
+// Hanya dari origin web app ScamGuard agar situs lain tidak bisa menyuntik sesi palsu.
 window.addEventListener('message', async (e) => {
-  if (e.source !== window || !e.data || e.data.type !== 'SCAMGUARD_START_IASC_REPORT') return;
-  const session = e.data.payload;
-  if (session) {
-    await send({ type: 'START_REPORTING_SESSION', session }).catch(() => {});
+  if (e.source !== window || e.origin !== WEB_ORIGIN || !e.data || e.data.type !== 'SCAMGUARD_START_IASC_REPORT') return;
+  const session = e.data.payload as ReportingSession | undefined;
+  if (!session?.incidentId) return;
+  const openUrl = typeof e.data.openUrl === 'string' ? e.data.openUrl : undefined;
+  const res = await send({ type: 'START_REPORTING_SESSION', session, openUrl }).catch(() => null);
+  if (res?.ok) window.postMessage({ type: 'SCAMGUARD_IASC_REPORT_ACK', incidentId: session.incidentId }, WEB_ORIGIN);
+});
+
+// Sesi bisa tersimpan setelah tab IASC selesai dimuat → mount saat itu juga.
+// Di tab web app, teruskan nomor laporan yang tertangkap agar tersimpan ke insiden (AC-06.4).
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.scamguard_active_reporting) return;
+  const next = changes.scamguard_active_reporting.newValue as ReportingSession | null | undefined;
+  const prev = changes.scamguard_active_reporting.oldValue as ReportingSession | null | undefined;
+  if (next && isIascPage() && !islandInstance) void checkAndMountIsland();
+  const reportNo = next?.result?.iascReportNo;
+  if (isWebApp && reportNo && reportNo !== prev?.result?.iascReportNo) {
+    window.postMessage({ type: 'SCAMGUARD_IASC_REPORT_SAVED', incidentId: next.incidentId, reportNo }, WEB_ORIGIN);
   }
 });
 

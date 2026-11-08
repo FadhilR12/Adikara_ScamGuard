@@ -10,7 +10,8 @@ export interface LocalState {
   history: RiskHistoryItem[];
   allowedDomains: Record<string, number>;
   onboardingDone: boolean;
-  activeReporting?: ReportingSession | null;
+  /** Kunci sesi pelaporan IASC (PRD 4.1 / AC-01.2). */
+  scamguard_active_reporting?: ReportingSession | null;
 }
 
 export interface TabResult {
@@ -75,19 +76,19 @@ export async function setTabResult(tabId: number, value: TabResult | null): Prom
 }
 
 export async function getActiveReporting(): Promise<ReportingSession | null> {
-  const { activeReporting } = await getLocal('activeReporting');
-  if (!activeReporting) return null;
-  if (activeReporting.expiresAt && activeReporting.expiresAt < Date.now()) {
+  const { scamguard_active_reporting: session } = await getLocal('scamguard_active_reporting');
+  if (!session) return null;
+  if (session.expiresAt && session.expiresAt < Date.now()) {
     await clearActiveReporting();
     return null;
   }
-  return activeReporting;
+  return session;
 }
 
 export async function setActiveReporting(session: ReportingSession): Promise<void> {
-  await setLocal({ activeReporting: session });
+  await setLocal({ scamguard_active_reporting: session });
 }
 
 export async function clearActiveReporting(): Promise<void> {
-  await setLocal({ activeReporting: null });
+  await setLocal({ scamguard_active_reporting: null });
 }

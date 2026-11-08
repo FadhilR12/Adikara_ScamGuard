@@ -12,8 +12,10 @@ export function rejectReason(file: File, maxBytes = MAX_BYTES, accept = ACCEPT):
   return null;
 }
 
-export function Dropzone({ id, title, subtitle, icon, onFiles, multiple = true, accept = ACCEPT, disabled }: {
+export function Dropzone({ id, title, subtitle, icon, onFiles, multiple = true, accept = ACCEPT, disabled, children }: {
   id: string; title: string; subtitle: string; icon?: ReactNode; onFiles: (files: File[]) => void; multiple?: boolean; accept?: string[]; disabled?: boolean;
+  /** Daftar file (chip) yang ditampilkan di dalam kotak, seperti pada referensi desain. */
+  children?: ReactNode;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -22,15 +24,15 @@ export function Dropzone({ id, title, subtitle, icon, onFiles, multiple = true, 
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); if (!disabled) onFiles(Array.from(e.dataTransfer.files)); }}
-      className={`flex flex-col items-center rounded-card border-2 border-dashed px-4 py-6 text-center transition ${over ? 'border-primary bg-primary-soft' : 'border-inputline bg-bg'} ${disabled ? 'opacity-60' : ''}`}
+      className={`flex h-full flex-col items-center rounded-card border-2 border-dashed px-4 py-6 text-center transition ${over ? 'border-primary bg-primary-soft' : 'border-inputline bg-white'} ${disabled ? 'opacity-60' : ''}`}
     >
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-soft text-primary">{icon ?? <Upload className="h-5 w-5" aria-hidden />}</span>
-      <p className="mt-2.5 text-[15px] font-bold">{title}</p>
+      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-soft text-primary">{icon ?? <Upload className="h-5 w-5" aria-hidden />}</span>
+      <p className="mt-3 text-[15px] font-semibold">{title}</p>
       <p className="mt-0.5 text-[13px] text-ink-3">
-        Tarik berkas ke sini atau{' '}
+        {subtitle ? `${subtitle} · ` : ''}Tarik berkas atau{' '}
         <button type="button" disabled={disabled} onClick={() => input.current?.click()} className="font-semibold text-primary underline underline-offset-2">pilih file</button>
       </p>
-      <p className="mt-0.5 text-[12px] text-ink-3">{subtitle}</p>
+      {children && <div className="mt-3 flex w-full flex-col items-center gap-2">{children}</div>}
       <input ref={input} id={id} type="file" className="sr-only" multiple={multiple} accept={accept.join(',')}
         onChange={(e) => { onFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} tabIndex={-1} aria-hidden />
     </div>

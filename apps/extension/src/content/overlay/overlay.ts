@@ -28,7 +28,7 @@ const PILL = {
 let current: { host: HTMLElement; cleanup: () => void } | null = null;
 
 /** @font-face tidak berlaku dari dalam Shadow DOM, jadi didaftarkan sekali di dokumen. */
-function ensureFonts(): void {
+export function ensureFonts(): void {
   if (document.getElementById('scamguard-fonts')) return;
   const faces = [[font400, 400], [font600, 600], [font700, 700], [font800, 800]] as const;
   const style = document.createElement('style');
@@ -39,21 +39,12 @@ function ensureFonts(): void {
   (document.head ?? document.documentElement).appendChild(style);
 }
 
-function scoreRing(result: RiskResult) {
-  const r = 34;
-  const c = 2 * Math.PI * r;
-  const filled = (result.score / 100) * c;
+/** Ikon jeda di tengah dialog (reference/ScamGuard/Case if Check High Risk.png). */
+function pauseBadge(result: RiskResult) {
   return html`
-    <div class="relative h-[88px] w-[88px]" role="img" aria-label="Skor risiko ${result.score} dari 100">
-      <svg width="88" height="88" viewBox="0 0 88 88" class="-rotate-90">
-        <circle cx="44" cy="44" r="${r}" fill="none" stroke="#F1F5F9" stroke-width="8"/>
-        <circle cx="44" cy="44" r="${r}" fill="none" stroke="${LEVEL_COLOR[result.level]}" stroke-width="8"
-          stroke-linecap="round" stroke-dasharray="${filled.toFixed(1)} ${c.toFixed(1)}"/>
-      </svg>
-      <div class="absolute inset-0 flex flex-col items-center justify-center">
-        <span class="text-[26px] font-extrabold leading-none text-ink">${result.score}</span>
-        <span class="mt-1 text-[11px] font-medium text-ink-3">dari 100</span>
-      </div>
+    <div class="flex h-[76px] w-[76px] items-center justify-center rounded-full border-2 border-primary-strong bg-primary-soft text-primary"
+         role="img" aria-label="Skor risiko ${result.score} dari 100">
+      ${icon('pause', 26)}
     </div>`;
 }
 
@@ -87,7 +78,7 @@ export function renderOverlay(result: RiskResult, handlers: OverlayHandlers): vo
           <div class="flex items-center justify-center gap-2 text-[15px] font-semibold text-ink-2">
             <span class="text-primary">${icon('shield', 18)}</span> ScamGuard
           </div>
-          <div class="mt-4 flex justify-center">${scoreRing(result)}</div>
+          <div class="mt-4 flex justify-center">${pauseBadge(result)}</div>
           <h2 id="sg-title" class="mt-3 text-center text-[28px] font-extrabold leading-tight tracking-tight text-ink">Tahan dulu sebentar</h2>
           <p id="sg-desc" class="mx-auto mt-2 max-w-[440px] text-center text-[16px] leading-relaxed text-ink-2">
             Halaman ini <strong class="font-bold text-ink">terindikasi berisiko</strong>. Ambil napas dan cek dulu sebelum mengirim uang.

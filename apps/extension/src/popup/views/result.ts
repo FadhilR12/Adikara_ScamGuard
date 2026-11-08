@@ -26,7 +26,7 @@ export function renderResult(app: HTMLElement, navigate: Navigate): void {
     const more = result.reasons.length - visible.length;
     app.innerHTML = html`
       ${header('Hasil pemeriksaan', `${TYPE_LABEL[last.inputType]} · ${last.target}`)}
-      <div class="flex flex-1 flex-col gap-3 overflow-y-auto bg-bg px-4 py-4">
+      <div class="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
         <section class="flex items-center gap-4 rounded-card border border-line bg-white p-4 shadow-card">
           ${scoreRing(result)}
           <div class="min-w-0">
@@ -49,9 +49,9 @@ export function renderResult(app: HTMLElement, navigate: Navigate): void {
       </div>
 
       <footer class="border-t border-divider bg-white px-4 pb-3 pt-3">
-        <div class="grid grid-cols-[1.3fr_1fr] gap-2.5">
-          <button data-delay class="btn-primary">Tunda transfer</button>
-          <button data-report class="btn-secondary">${icon('flag', 16)} Laporkan</button>
+        <div class="flex justify-center gap-2.5">
+          <button data-delay class="btn-primary px-5">Tunda transfer</button>
+          <button data-report class="btn-secondary px-5">Laporkan</button>
         </div>
         <p class="mt-2.5 text-center text-[13px] text-ink-2">Sudah terlanjur transfer?
           <button data-guide class="font-bold text-primary hover:text-primary-hover">Lihat panduan</button></p>

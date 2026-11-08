@@ -4,6 +4,8 @@ import type { Incident, ReportingSession } from '@scamguard/shared';
 import { IASC_DEMO_URL, IASC_URL } from './config';
 import { generateEvidencePack, packFileName, type PackFile } from './pdf';
 
+const EXTENSION_ACK_TIMEOUT_MS = 1500;
+
 export async function startIascReporting(
   incident: Incident,
   files: PackFile[] = [],
@@ -50,10 +52,38 @@ export async function startIascReporting(
     },
   };
 
-  // Kirim payload ke content script ekstensi
-  window.postMessage({ type: 'SCAMGUARD_START_IASC_REPORT', payload: session }, '*');
+  // Tujuan: portal resmi atau simulasi demo (URL absolut agar bisa dibuka oleh ekstensi).
+  const destUrl = new URL(target === 'demo' ? IASC_DEMO_URL : IASC_URL || IASC_DEMO_URL, window.location.origin).toString();
 
-  // Buka URL target di tab baru
-  const destUrl = target === 'demo' ? IASC_DEMO_URL : (IASC_URL || IASC_DEMO_URL);
-  window.open(destUrl, '_blank', 'noopener,noreferrer');
+  // Kirim payload ke content script ekstensi (hanya ke origin sendiri). Bila ekstensi terpasang,
+  // ekstensi menyimpan sesi lalu membuka tab IASC sendiri (AC-01.2 & AC-01.3) dan membalas ACK.
+  const acked = await new Promise<boolean>((resolve) => {
+    const timer = window.setTimeout(() => {
+      window.removeEventListener('message', onAck);
+      resolve(false);
+    }, EXTENSION_ACK_TIMEOUT_MS);
+    function onAck(e: MessageEvent) {
+      if (e.source !== window || e.origin !== window.location.origin) return;
+      if (e.data?.type !== 'SCAMGUARD_IASC_REPORT_ACK' || e.data.incidentId !== incident.id) return;
+      window.clearTimeout(timer);
+      window.removeEventListener('message', onAck);
+      resolve(true);
+    }
+    window.addEventListener('message', onAck);
+    window.postMessage({ type: 'SCAMGUARD_START_IASC_REPORT', payload: session, openUrl: destUrl }, window.location.origin);
+  });
+
+  // Ekstensi tidak terpasang → buka manual (tanpa Co-Pilot).
+  if (!acked) window.open(destUrl, '_blank', 'noopener,noreferrer');
+}
+
+/** Dengarkan nomor laporan IASC yang ditangkap ekstensi (AC-06.4). Mengembalikan fungsi unsubscribe. */
+export function onIascReportSaved(incidentId: string, cb: (reportNo: string) => void): () => void {
+  const handler = (e: MessageEvent) => {
+    if (e.source !== window || e.origin !== window.location.origin) return;
+    if (e.data?.type !== 'SCAMGUARD_IASC_REPORT_SAVED' || e.data.incidentId !== incidentId) return;
+    if (typeof e.data.reportNo === 'string' && e.data.reportNo) cb(e.data.reportNo);
+  };
+  window.addEventListener('message', handler);
+  return () => window.removeEventListener('message', handler);
 }

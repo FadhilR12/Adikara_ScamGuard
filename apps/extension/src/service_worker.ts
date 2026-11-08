@@ -4,7 +4,7 @@ import type { RiskResult, RuleSet } from '@scamguard/shared';
 import { ALLOW_HOURS, RULES_REFRESH_MINUTES, WEB_APP_URL } from './config';
 import { api, stripQuery, track } from './lib/api';
 import { fetchPage } from './lib/fetch-page';
-import type { CheckResponse, Message, TabStatus } from './lib/messaging';
+import type { CheckResponse, Message, PageSetOp, TabStatus } from './lib/messaging';
 import {
   clearActiveReporting,
   getActiveReporting,
@@ -35,6 +35,47 @@ function hostOf(url: string): string | null {
 
 function isSupported(url?: string): boolean {
   return !!url && /^https?:/.test(url) && !/^https:\/\/(chrome\.google\.com\/webstore|chromewebstore\.google\.com)/.test(url);
+}
+
+/** Hanya portal IASC resmi atau halaman simulasi demo yang boleh dibuka otomatis. */
+function isIascUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'https:' && u.hostname === 'iasc.ojk.go.id') return true;
+    return u.origin === new URL(WEB_APP_URL).origin && u.pathname.startsWith('/demo/iasc-portal');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Dijalankan di MAIN world halaman IASC (lewat chrome.scripting) agar bisa memakai
+ * instance flatpickr & jQuery/select2 milik halaman. Harus self-contained (tanpa closure).
+ */
+function runPageOps(ops: PageSetOp[]): boolean[] {
+  type FpInput = HTMLInputElement & { _flatpickr?: { setDate: (d: string, trigger: boolean) => void } };
+  type JQ = (el: Element) => { val: (v: string) => { trigger: (e: string) => unknown } };
+  const jq = (window as unknown as { jQuery?: JQ }).jQuery;
+  return ops.map((op) => {
+    const el = document.querySelector(op.selector);
+    if (!el) return false;
+    try {
+      if (op.kind === 'flatpickr') {
+        const fp = (el as FpInput)._flatpickr;
+        if (!fp) return false;
+        fp.setDate(op.value, true);
+        return true;
+      }
+      if (op.kind === 'select2') {
+        if (!jq) return false;
+        jq(el).val(op.value).trigger('change');
+        return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  });
 }
 
 async function setBadge(tabId: number, level: RiskResult['level'] | null): Promise<void> {
@@ -178,6 +219,11 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
     case 'START_REPORTING_SESSION': {
       await setActiveReporting(msg.session);
       track('iasc_session_started', { incidentId: msg.session.incidentId });
+      // AC-01.3: ekstensi yang membuka tab IASC (setelah sesi tersimpan → tidak ada race,
+      // dan tidak terkena popup blocker karena bukan window.open dari halaman).
+      if (msg.openUrl && isIascUrl(msg.openUrl)) {
+        await chrome.tabs.create({ url: msg.openUrl, index: (sender.tab?.index ?? 0) + 1, active: true });
+      }
       return { ok: true };
     }
     case 'GET_REPORTING_SESSION': {
@@ -202,8 +248,24 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
           body: JSON.stringify({ iascReportNo: msg.reportNo }),
         });
       }
-      track('iasc_report_captured', { reportNo: msg.reportNo, incidentId: incId });
+      track('iasc_report_captured', { incidentId: incId });
       return { ok: true };
+    }
+    case 'PAGE_SET': {
+      if (tabId === undefined) return { ok: false, results: [] };
+      try {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: runPageOps,
+          args: [msg.ops],
+        });
+        const results = (res?.result as boolean[] | undefined) ?? [];
+        return { ok: results.every(Boolean), results };
+      } catch (err) {
+        console.warn('[ScamGuard] PAGE_SET gagal:', err);
+        return { ok: false, results: msg.ops.map(() => false) };
+      }
     }
   }
 }

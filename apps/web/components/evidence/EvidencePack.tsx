@@ -1,22 +1,21 @@
 'use client';
 // Evidence Pack Generator (KF-06 s.d. KF-09, PRD 8.7).
 import { BANKS, CONTACT_CHANNELS, SCAM_TYPES, type Evidence, type EvidenceCategory, type Incident } from '@scamguard/shared';
-import { Download, Image as ImageIcon, Lock, Sparkles, Trash2, Upload } from 'lucide-react';
+import { Check, CheckCircle2, Download, FileText, Image as ImageIcon, Link2, Pencil, ShieldCheck, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError, api, fetchEvidenceBlob, uploadEvidence } from '@/lib/api';
 import { extractFields, type Extracted } from '@/lib/extract';
-import { formatDate, formatRupiah, formatTime, fromLocalInput, toLocalInput } from '@/lib/format';
+import { IASC_URL } from '@/lib/config';
+import { formatBytes, formatDate, formatRupiah, formatTime, fromLocalInput, toLocalInput } from '@/lib/format';
 import { localFiles } from '@/lib/localFiles';
 import { OcrTimeoutError, recognize } from '@/lib/ocr';
 import { generateEvidencePack, packFileName, type PackFile } from '@/lib/pdf';
 import { clearIncidentBackup, useIncident, type IncidentPatch } from '@/lib/useIncident';
 import { Footer, Header } from '../Header';
 import { Button, ConfirmDialog, Field, OfflineBanner, Spinner, inputClass, useToast } from '../ui';
-import { CompletenessPanel } from './CompletenessPanel';
 import { Dropzone, MAX_BYTES, rejectReason } from './Dropzone';
-import { EvidenceFileCard } from './EvidenceFileCard';
 import { MoneyInput } from './MoneyInput';
 import { OcrResultBox } from './OcrResultBox';
 import { PdfPreview } from './PdfPreview';
@@ -66,6 +65,7 @@ export function EvidencePack({ id }: { id: string }) {
   const [overwrite, setOverwrite] = useState<{ patch: IncidentPatch; diffs: string[] } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [relatedText, setRelatedText] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
   const toast = useToast();
   const router = useRouter();
   const formRef = useRef<HTMLDivElement>(null);
@@ -242,6 +242,38 @@ export function EvidencePack({ id }: { id: string }) {
   const missing = comp.items.filter((x) => !x.done).map((x) => x.label);
   const pendingTransfer = uploads.some((u) => u.status === 'ocr');
 
+  const chip = (key: string, name: string, size: number, state: 'done' | 'busy' | 'error', onRemove: () => void, extra?: ReactNode) => (
+    <span key={key} className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] ${
+      state === 'error' ? 'border-medium-border bg-medium-bg text-medium-text' : 'border-low-border bg-low-bg text-low-text'}`}>
+      {state === 'busy' ? <Spinner className="!h-3 !w-3" /> : state === 'done' ? <Check className="h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
+      <span className="truncate" title={name}>{name}</span>
+      <span className="shrink-0 text-ink-3">({formatBytes(size)})</span>
+      {extra}
+      <button type="button" onClick={onRemove} aria-label={`Hapus ${name}`} className="-mr-1 shrink-0 rounded p-0.5 text-ink-3 hover:bg-white hover:text-ink"><X className="h-3.5 w-3.5" /></button>
+    </span>
+  );
+
+  const zoneFiles = (zone: 'transfer' | 'chat') => {
+    const inZone = (c: EvidenceCategory) => (zone === 'transfer' ? c === 'transfer' : c !== 'transfer');
+    return [
+      ...evidence.filter((e) => inZone(e.category)).map((e) => chip(e.id, e.fileName, e.size, 'done', () => void removeEvidence(e))),
+      ...uploads.filter((u) => inZone(u.category)).map((u) =>
+        chip(u.key, u.file.name, u.file.size, u.status === 'error' ? 'error' : 'busy', () => setUploads((xs) => xs.filter((x) => x.key !== u.key)),
+          u.status === 'error' ? <button type="button" onClick={() => void upload(u)} className="shrink-0 font-bold text-primary">Coba lagi</button>
+            : u.status === 'ocr' ? <span className="shrink-0 text-ink-3">membaca {u.ocrPct}%</span> : <span className="shrink-0 text-ink-3">{u.progress}%</span>)),
+    ];
+  };
+
+  const busy = generating || uploads.some((u) => u.status !== 'error');
+  const requestDownload = () => {
+    if (!agreed) {
+      toast('Centang pernyataan kebenaran data terlebih dahulu.');
+      return;
+    }
+    if (comp.done < comp.total) setConfirmIncomplete(true);
+    else void download();
+  };
+
   return (
     <>
       <Header crumbs={[{ label: 'Beranda', href: '/' }, { label: 'Mode Darurat', href: `/darurat/${incident.id}` }, { label: 'Evidence Pack' }]} />
@@ -252,163 +284,180 @@ export function EvidencePack({ id }: { id: string }) {
         </div>
       )}
 
-      <main className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-16 pt-8 sm:px-8">
+      <main className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-16 pt-12 sm:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-[28px] font-extrabold tracking-tight sm:text-[32px]">Evidence Pack Generator</h1>
-            <p className="mt-1 max-w-[720px] text-[16px] text-ink-2">Susun kronologi dan bukti transaksi untuk dilaporkan ke bank, e-wallet, dan IASC.</p>
+            <p className="mt-1 max-w-[900px] text-[16px] text-ink-2">Susun berkas kronologi dan bukti transaksi untuk dilaporkan ke bank, e-wallet, dan kanal IASC.</p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-btn border border-line bg-white px-3.5 py-2 text-[13.5px] text-ink-2 shadow-card">
-            <Lock className="h-4 w-4 text-primary" aria-hidden /> Hanya dapat diakses dari perangkat Anda
+          <span className="inline-flex items-center gap-2 rounded-btn border border-line bg-white px-4 py-2.5 text-[13.5px] text-ink-2 shadow-card">
+            <ShieldCheck className="h-4 w-4 text-primary" aria-hidden /> Hanya dapat diakses dari perangkat Anda
           </span>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-start gap-6">
-          {/* Kolom kiri */}
-          <div ref={formRef} className="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
-            <section className="rounded-card border border-line bg-white p-5 shadow-card sm:p-8" aria-labelledby="data-title">
-              <div className="flex items-start justify-between gap-3 border-b border-divider pb-4">
-                <div>
-                  <h2 id="data-title" className="text-[20px] font-bold">Data transaksi</h2>
-                  <p className="mt-0.5 text-[14px] text-ink-3">Isi sesuai yang tertera pada mutasi atau bukti transfer.</p>
-                </div>
-                <span className="shrink-0 text-[12.5px] text-ink-3" aria-live="polite">
-                  {save === 'saving' ? <span className="flex items-center gap-1.5"><Spinner /> Menyimpan…</span> : save === 'saved' ? 'Tersimpan' : save === 'error' ? <span className="text-medium-text">{saveError}</span> : ''}
-                </span>
+        <div className="mt-8 grid items-start gap-7 lg:grid-cols-[minmax(0,1.42fr)_minmax(0,1fr)]">
+          {/* Kolom kiri — Lengkapi Informasi Kejadian */}
+          <section ref={formRef} className="rounded-card border border-line bg-white p-6 shadow-card sm:p-8" aria-labelledby="data-title">
+            <div className="flex items-start justify-between gap-3 border-b border-divider pb-5">
+              <div>
+                <h2 id="data-title" className="text-[21px] font-bold">Lengkapi Informasi Kejadian</h2>
+                <p className="mt-1 text-[14px] text-ink-3">Isi rincian transaksi dengan teliti. Format ini disesuaikan dengan standar pelaporan perbankan.</p>
               </div>
+              <span className="shrink-0 text-[12.5px] text-ink-3" aria-live="polite">
+                {save === 'saving' ? <span className="flex items-center gap-1.5"><Spinner /> Menyimpan…</span> : save === 'saved' ? 'Tersimpan' : save === 'error' ? <span className="text-medium-text">{saveError}</span> : ''}
+              </span>
+            </div>
 
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <Field id="transferAt" label="Waktu transfer" required hint="Sesuai jam pada mutasi/resi." warning={w.transferAt}>
-                  <input id="transferAt" type="datetime-local" className={inputClass(!!w.transferAt)} value={toLocalInput(incident.transferAt)}
-                    max={toLocalInput(new Date().toISOString())} aria-describedby="transferAt-msg"
-                    onChange={(e) => {
-                      const iso = fromLocalInput(e.target.value);
-                      if (iso && new Date(iso).getTime() > Date.now() + 60_000) return toast('Waktu transfer tidak boleh di masa depan.');
-                      update({ transferAt: iso });
-                    }} />
-                </Field>
-                <Field id="amount" label="Nominal transfer" required hint="Total dana yang telah dikirim." warning={w.amount}>
-                  <MoneyInput id="amount" value={incident.amount} warn={!!w.amount} describedBy="amount-msg" onChange={(v) => update({ amount: v })} />
-                </Field>
-                <Field id="recipientBank" label="Bank / e-wallet penerima" required warning={w.recipientBank}>
-                  <input id="recipientBank" list="banks" className={inputClass(!!w.recipientBank)} value={incident.recipientBank ?? ''} placeholder="Pilih atau ketik"
+            <div className="mt-6 grid gap-x-5 gap-y-5 sm:grid-cols-2">
+              <Field id="transferAt" label="Waktu Transfer" required hint="Sesuai jam tertera pada mutasi/resi." warning={w.transferAt}>
+                <input id="transferAt" type="datetime-local" className={inputClass(!!w.transferAt)} value={toLocalInput(incident.transferAt)}
+                  max={toLocalInput(new Date().toISOString())} aria-describedby="transferAt-msg"
+                  onChange={(e) => {
+                    const iso = fromLocalInput(e.target.value);
+                    if (iso && new Date(iso).getTime() > Date.now() + 60_000) return toast('Waktu transfer tidak boleh di masa depan.');
+                    update({ transferAt: iso });
+                  }} />
+              </Field>
+              <Field id="amount" label="Nominal Transfer" required hint="Total dana yang telah dikirim." warning={w.amount}>
+                <MoneyInput id="amount" value={incident.amount} warn={!!w.amount} describedBy="amount-msg" onChange={(v) => update({ amount: v })} />
+              </Field>
+              <Field id="recipientBank" label="Metode Pembayaran" required warning={w.recipientBank}>
+                <div className="relative">
+                  <input id="recipientBank" list="banks" className={`${inputClass(!!w.recipientBank)} pr-10`} value={incident.recipientBank ?? ''} placeholder="Bank Transfer (BCA/Mandiri/BRI/dll)"
                     aria-describedby="recipientBank-msg" onChange={(e) => update({ recipientBank: e.target.value })} />
-                  <datalist id="banks">{BANKS.map((b) => <option key={b} value={b} />)}</datalist>
-                </Field>
-                <Field id="recipientAccount" label="Nomor rekening / akun penerima" required
-                  warning={w.recipientAccount ?? (accountInvalid ? 'Nomor rekening/akun 6–20 karakter huruf atau angka.' : null)}>
-                  <input id="recipientAccount" className={inputClass(!!w.recipientAccount || accountInvalid)} value={incident.recipientAccount ?? ''} inputMode="numeric"
-                    aria-describedby="recipientAccount-msg" maxLength={24} onChange={(e) => update({ recipientAccount: e.target.value })} />
-                </Field>
-                <Field id="recipientName" label="Nama pemilik rekening">
-                  <input id="recipientName" className={inputClass()} value={incident.recipientName ?? ''} onChange={(e) => update({ recipientName: e.target.value })} />
-                </Field>
-                <Field id="related" label="Tautan / akun terkait" hint="Pisahkan dengan koma.">
-                  <input id="related" className={inputClass()} placeholder="mis. investasi-cuan88.xyz, @admin_cuan"
-                    value={relatedText ?? (incident.relatedAccounts ?? []).join(', ')}
-                    onChange={(e) => {
-                      setRelatedText(e.target.value);
-                      update({ relatedAccounts: e.target.value.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 20) });
-                    }} />
-                </Field>
-                <Field id="contactChannel" label="Media kontak pertama">
-                  <select id="contactChannel" className={inputClass()} value={incident.contactChannel ?? ''} onChange={(e) => update({ contactChannel: e.target.value || null })}>
-                    <option value="">Pilih…</option>
-                    {CONTACT_CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </Field>
-                <Field id="scamType" label="Jenis modus">
-                  <select id="scamType" className={inputClass()} value={incident.scamType ?? ''} onChange={(e) => update({ scamType: e.target.value || null })}>
-                    <option value="">Pilih…</option>
-                    {SCAM_TYPES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </Field>
-              </div>
-            </section>
-
-            <section className="rounded-card border border-line bg-white p-5 shadow-card sm:p-8" aria-labelledby="bukti-title">
-              <h2 id="bukti-title" className="text-[20px] font-bold">Bukti</h2>
-              <p className="mt-0.5 text-[14px] text-ink-3">JPG, PNG, WEBP, atau PDF · maks. 10 MB per file · maks. {MAX_FILES} file ({evidence.length + uploads.length}/{MAX_FILES}).</p>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <Dropzone id="drop-transfer" title="Bukti transfer" subtitle="Struk / m-banking. Gambar dibaca otomatis."
-                  icon={<Upload className="h-5 w-5" aria-hidden />} onFiles={(f) => void addFiles(f, 'transfer')} />
-                <Dropzone id="drop-chat" title="Screenshot percakapan" subtitle="Chat & profil akun terkait."
-                  icon={<ImageIcon className="h-5 w-5" aria-hidden />} onFiles={(f) => void addFiles(f, 'chat')} />
-              </div>
-
-              {(ocr || pendingTransfer) && (
-                <div className="mt-5">
-                  {ocr ? <OcrResultBox fields={ocr.fields} confidence={ocr.confidence} onApply={applyOcr} />
-                    : <p className="flex items-center gap-2 text-[14px] text-ink-2"><Spinner /> Membaca gambar…</p>}
+                  <Pencil className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" aria-hidden />
                 </div>
-              )}
+                <datalist id="banks">{BANKS.map((b) => <option key={b} value={b} />)}</datalist>
+              </Field>
+              <Field id="recipientAccount" label="Nomor Rekening / E-Wallet Penerima" required
+                warning={w.recipientAccount ?? (accountInvalid ? 'Nomor rekening/akun 6–20 karakter huruf atau angka.' : null)}>
+                <input id="recipientAccount" className={inputClass(!!w.recipientAccount || accountInvalid)} value={incident.recipientAccount ?? ''} inputMode="numeric"
+                  placeholder="Contoh: 8820194829" aria-describedby="recipientAccount-msg" maxLength={24} onChange={(e) => update({ recipientAccount: e.target.value })} />
+              </Field>
+              <Field id="recipientName" label="Nama Pemilik Rekening">
+                <input id="recipientName" className={inputClass()} value={incident.recipientName ?? ''} placeholder="a/n penerima" onChange={(e) => update({ recipientName: e.target.value })} />
+              </Field>
+              <Field id="related" label="Nomor / Akun Pelaku" hint="Pisahkan dengan koma.">
+                <input id="related" className={inputClass()} placeholder="mis. 0812xxxx, @admin_cuan"
+                  value={relatedText ?? (incident.relatedAccounts ?? []).join(', ')}
+                  onChange={(e) => {
+                    setRelatedText(e.target.value);
+                    update({ relatedAccounts: e.target.value.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20) });
+                  }} />
+              </Field>
+              <Field id="contactChannel" label="Media Kontak Pertama">
+                <select id="contactChannel" className={inputClass()} value={incident.contactChannel ?? ''} onChange={(e) => update({ contactChannel: e.target.value || null })}>
+                  <option value="">Pilih…</option>
+                  {CONTACT_CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </Field>
+              <Field id="scamType" label="Jenis Modus">
+                <select id="scamType" className={inputClass()} value={incident.scamType ?? ''} onChange={(e) => update({ scamType: e.target.value || null })}>
+                  <option value="">Pilih…</option>
+                  {SCAM_TYPES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </Field>
+            </div>
 
-              {(evidence.length > 0 || uploads.length > 0) && (
-                <ul className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {evidence.map((e) => (
-                    <EvidenceFileCard key={e.id} name={e.fileName} size={e.size} mime={e.mime} previewUrl={previews[e.id]} category={e.category}
-                      status="done" onCategory={(c) => void changeCategory(e, c)} onRemove={() => void removeEvidence(e)} />
-                  ))}
-                  {uploads.map((u) => (
-                    <EvidenceFileCard key={u.key} name={u.file.name} size={u.file.size} mime={u.file.type} previewUrl={u.previewUrl} category={u.category}
-                      status={u.status} progress={u.progress} ocrPct={u.ocrPct} error={u.error}
-                      onCategory={(c) => patchItem(u.key, { category: c })}
-                      onRemove={() => setUploads((xs) => xs.filter((x) => x.key !== u.key))} onRetry={() => void upload(u)} />
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="rounded-card border border-line bg-white p-5 shadow-card sm:p-8" aria-labelledby="krono-title">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 id="krono-title" className="text-[20px] font-bold">Kronologi <span className="text-high" aria-hidden>*</span></h2>
-                  <p className="mt-0.5 text-[14px] text-ink-3">Ceritakan urutan kejadian: kapan dihubungi, lewat apa, apa yang diminta, kapan transfer.</p>
-                </div>
-                <Button variant="secondary" className="!min-h-[40px] text-[14px]"
+            {/* Kronologi */}
+            <div className="mt-6">
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <label htmlFor="chronology" className="text-[14px] font-semibold">Kronologi Kejadian <span className="text-high" aria-hidden>*</span></label>
+                <button type="button" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-primary hover:underline"
                   onClick={() => update({ chronology: incident.chronology?.trim() ? `${incident.chronology.trim()}\n\n${chronologyTemplate(incident)}` : chronologyTemplate(incident) })}>
-                  <Sparkles className="h-4 w-4" aria-hidden /> Bantu susun kronologi
-                </Button>
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden /> Bantu susun · ringkas &amp; kronologis
+                </button>
               </div>
-              <label htmlFor="chronology" className="sr-only">Kronologi kejadian</label>
-              <textarea id="chronology" rows={8} maxLength={3000} value={incident.chronology ?? ''} aria-describedby="chronology-msg"
+              <textarea id="chronology" rows={5} maxLength={3000} value={incident.chronology ?? ''} aria-describedby="chronology-msg"
                 onChange={(e) => update({ chronology: e.target.value })}
-                placeholder="Contoh: 25 Okt 2026 — Dihubungi lewat WhatsApp oleh akun yang menawarkan investasi profit tetap…"
-                className={`mt-4 w-full rounded-btn border bg-white px-3.5 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 ${w.chronology ? 'border-medium focus:ring-medium-border' : 'border-inputline focus:border-primary focus:ring-primary-strong'}`} />
+                placeholder="Contoh: Dihubungi melalui grup Telegram penawaran investasi dengan iming-iming komisi 30%…"
+                className={`w-full rounded-btn border bg-white px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 ${w.chronology ? 'border-medium focus:ring-medium-border' : 'border-inputline focus:border-primary focus:ring-primary-strong'}`} />
               <div className="mt-1 flex justify-between gap-3 text-[12.5px]">
                 <p id="chronology-msg" className="font-medium text-medium-text">{w.chronology}</p>
                 <p className="shrink-0 text-ink-3">{(incident.chronology ?? '').length}/3.000</p>
               </div>
-            </section>
-          </div>
+            </div>
 
-          {/* Kolom kanan */}
-          <aside className="flex w-full flex-col gap-5 lg:sticky lg:top-[88px] lg:w-[340px] lg:flex-none">
-            <CompletenessPanel completeness={comp} />
-            <section className="rounded-card border border-line bg-white p-5 shadow-card" aria-labelledby="preview-title">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 id="preview-title" className="text-[17px] font-bold">Pratinjau dokumen</h2>
-                <span className="rounded-md border border-primary-strong bg-primary-soft px-2 py-0.5 text-[11.5px] font-bold text-primary">PDF · A4</span>
+            {/* Unggah bukti */}
+            <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[14px] font-semibold">Unggah Bukti Transfer <span className="text-high" aria-hidden>*</span></span>
+                <Dropzone id="drop-transfer" title="Bukti Transfer (Struk / M-Banking)" subtitle=""
+                  icon={<Upload className="h-4 w-4" aria-hidden />} onFiles={(f) => void addFiles(f, 'transfer')}>
+                  {zoneFiles('transfer')}
+                </Dropzone>
               </div>
-              <PdfPreview incident={incident} files={evidence.length} />
-              <Button className="mt-4 w-full" disabled={generating || uploads.some((u) => u.status !== 'error')}
-                onClick={() => (comp.done < comp.total ? setConfirmIncomplete(true) : void download())}>
-                {generating ? <><Spinner /> Menyusun PDF…</> : <><Download className="h-4 w-4" aria-hidden /> Unduh Evidence Pack (PDF)</>}
-              </Button>
-              <Button variant="secondary" className="mt-2.5 w-full"
-                onClick={async () => { update({ currentStep: 3 }); await flush(); router.push(`/darurat/${incident.id}`); }}>
-                Lanjut lapor ke IASC ↗
-              </Button>
-              <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">
-                Data dan bukti Anda tersimpan aman dan hanya dapat diakses oleh Anda. Kebenaran isi dokumen tetap menjadi tanggung jawab pelapor.
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[14px] font-semibold">Unggah Screenshot Percakapan <span className="text-high" aria-hidden>*</span></span>
+                <Dropzone id="drop-chat" title="Chat & Nomor Pelaku" subtitle=""
+                  icon={<ImageIcon className="h-4 w-4" aria-hidden />} onFiles={(f) => void addFiles(f, 'chat')}>
+                  {zoneFiles('chat')}
+                </Dropzone>
+              </div>
+            </div>
+            <p className="mt-2 text-[12.5px] text-ink-3">JPG, PNG, WEBP, atau PDF · maks. 10 MB per file · {evidence.length + uploads.length}/{MAX_FILES} file.</p>
+
+            {(ocr || pendingTransfer) && (
+              <div className="mt-5">
+                {ocr ? <OcrResultBox fields={ocr.fields} confidence={ocr.confidence} onApply={applyOcr} />
+                  : <p className="flex items-center gap-2 text-[14px] text-ink-2"><Spinner /> Membaca gambar…</p>}
+              </div>
+            )}
+
+            <label className="mt-7 flex cursor-pointer items-start gap-3 text-[14px] text-ink-2">
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded accent-[#0F766E]" />
+              Saya menyatakan data ini benar dan dapat dipertanggungjawabkan.
+            </label>
+
+            <Button className="mt-6 h-12 w-full" disabled={busy} onClick={requestDownload}>
+              {generating ? <><Spinner /> Menyusun PDF…</> : <><FileText className="h-4 w-4" aria-hidden /> Buat Evidence Pack</>}
+            </Button>
+          </section>
+
+          {/* Kolom kanan — Pratinjau Dokumen */}
+          <aside className="flex flex-col gap-4 lg:sticky lg:top-[92px]">
+            <section className="rounded-card border border-line bg-white p-6 shadow-card sm:p-8" aria-labelledby="preview-title">
+              <div className="flex items-start justify-between gap-3 border-b border-divider pb-5">
+                <div>
+                  <h2 id="preview-title" className="text-[21px] font-bold">Pratinjau Dokumen</h2>
+                  <p className="mt-1 text-[14px] text-ink-3">Format resmi siap cetak &amp; kirim</p>
+                </div>
+                <span className="rounded-md border border-primary-strong bg-primary-soft px-2.5 py-1 text-[12px] font-bold text-primary">PDF • A4</span>
+              </div>
+              <div className="mt-6"><PdfPreview incident={incident} evidence={evidence} /></div>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <Button className="h-12 w-full whitespace-nowrap !px-3 !text-[14px]" disabled={busy} onClick={requestDownload}>
+                  {generating ? <Spinner /> : <Download className="h-4 w-4" aria-hidden />} Unduh PDF
+                </Button>
+                <Button variant="secondary" className="h-12 w-full whitespace-nowrap !px-3 !text-[14px]"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(IASC_URL);
+                      toast('Tautan IASC disalin.');
+                    } catch {
+                      toast(IASC_URL);
+                    }
+                  }}>
+                  <Link2 className="h-4 w-4" aria-hidden /> Salin Tautan ke IASC
+                </Button>
+              </div>
+              <p className="mt-4 flex items-center justify-center gap-2 text-center text-[13px] text-ink-3">
+                <CheckCircle2 className="h-4 w-4 text-primary" aria-hidden /> Berkas siap dilampirkan langsung ke customer service bank
               </p>
             </section>
-            <button onClick={() => setConfirmDelete(true)} className="inline-flex items-center justify-center gap-2 rounded-btn py-2 text-[14px] font-semibold text-high-text hover:bg-high-bg">
-              <Trash2 className="h-4 w-4" aria-hidden /> Hapus laporan ini
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14px]">
+              <button type="button" className="font-semibold text-primary hover:underline"
+                onClick={async () => { update({ currentStep: 3 }); await flush(); router.push(`/darurat/${incident.id}`); }}>
+                Lapor ke IASC dengan Co-Pilot →
+              </button>
+              <button type="button" onClick={() => setConfirmDelete(true)} className="inline-flex items-center gap-1.5 font-semibold text-high-text hover:underline">
+                <Trash2 className="h-4 w-4" aria-hidden /> Hapus laporan
+              </button>
+            </div>
           </aside>
         </div>
-        <p className="mx-auto mt-10 max-w-[720px] text-center text-[13px] text-ink-3">
+        <p className="mx-auto mt-12 max-w-[760px] text-center text-[14px] leading-relaxed text-ink-2">
           ScamGuard membantu menyusun bukti dan mengarahkan ke kanal resmi. Keputusan pemblokiran dan pemulihan dana tetap pada lembaga terkait.
         </p>
       </main>

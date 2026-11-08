@@ -1,26 +1,25 @@
 'use client';
-// Mode Darurat 4 langkah (KF-05, PRD 8.6).
-import { ArrowLeft, ArrowRight, Clock, ExternalLink, FileText, Home, Phone, ShieldCheck } from 'lucide-react';
+// Mode Darurat 4 langkah (KF-05, PRD 8.6) — tata letak mengikuti reference/ScamGuard/Emergency Mode.png:
+// daftar 4 kartu langkah + tombol "Lanjut ke Pengumpulan Bukti". Klik kartu untuk membuka detailnya.
+import { ArrowRight, Check, CheckCircle2, Clock, FileText, FolderOpen, Phone, ShieldX } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
-import { IASC_URL } from '@/lib/config';
 import { fromLocalInput, hms, toLocalInput } from '@/lib/format';
-import { startIascReporting } from '@/lib/reporting-session';
+import { onIascReportSaved, startIascReporting } from '@/lib/reporting-session';
 import { bankScript } from '@/lib/script';
 import { useIncident } from '@/lib/useIncident';
-import { Footer, Logo } from '../Header';
-import { Button, Modal, OfflineBanner, Pill, buttonClass, inputClass } from '../ui';
+import { Footer, Header } from '../Header';
+import { Button, Modal, OfflineBanner, Pill, WhyBox, buttonClass, inputClass } from '../ui';
 import { ChecklistItem } from './ChecklistItem';
-import { EmergencyStepper } from './EmergencyStepper';
 import { ScriptBox } from './ScriptBox';
-import { NumberedStep, StepCard } from './StepCard';
+import { NumberedStep } from './StepCard';
 
 const STEPS = [
-  { title: 'Hentikan transfer lanjutan', short: 'Hentikan transfer' },
-  { title: 'Hubungi bank atau e-wallet Anda', short: 'Hubungi bank' },
-  { title: 'Siapkan Evidence Pack', short: 'Evidence Pack' },
-  { title: 'Laporkan ke IASC', short: 'Lapor IASC' },
+  { title: 'Hentikan Transfer Lanjutan', desc: 'Jangan kirim uang lagi atau bagikan OTP/PIN.', icon: ShieldX },
+  { title: 'Hubungi Bank atau E-Wallet', desc: 'Laporkan transaksi dan minta pemblokiran jika memungkinkan.', icon: Phone },
+  { title: 'Kumpulkan Bukti', desc: 'Simpan bukti transfer, screenshot percakapan, dan data rekening pelaku.', icon: FolderOpen },
+  { title: 'Siapkan Laporan', desc: 'Susun kronologi dan siapkan dokumen untuk kanal resmi.', icon: FileText },
 ];
 
 function useNow(): number {
@@ -37,10 +36,27 @@ export function EmergencyMode({ id }: { id: string }) {
   const [askTime, setAskTime] = useState(false);
   const [timeInput, setTimeInput] = useState('');
   const [contactsOpen, setContactsOpen] = useState(false);
+  const [open, setOpen] = useState<number | null>(null);
+  const openInit = useRef(false);
   const now = useNow();
+  const iascInputRef = useRef<HTMLInputElement>(null);
+
+  // Nomor laporan yang ditangkap ScamGuard Co-Pilot di tab IASC → simpan ke insiden (API + localStorage).
+  useEffect(() => {
+    if (!incident?.id) return;
+    return onIascReportSaved(incident.id, (reportNo) => {
+      update({ iascReportNo: reportNo });
+      if (iascInputRef.current) iascInputRef.current.value = reportNo;
+    });
+  }, [incident?.id, update]);
 
   useEffect(() => {
     if (!incident) return;
+    // Kembali di tengah alur (mis. dari Evidence Pack) → buka langkah terakhir.
+    if (!openInit.current) {
+      openInit.current = true;
+      if (incident.currentStep > 0) setOpen(Math.min(incident.currentStep, 3));
+    }
     const askedKey = `sg_asked_${incident.id}`;
     if (!incident.transferAt && !localStorage.getItem(askedKey)) {
       setTimeInput(toLocalInput(new Date().toISOString()));
@@ -53,14 +69,6 @@ export function EmergencyMode({ id }: { id: string }) {
     }
   }, [incident?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const goTo = useCallback(
-    (step: number) => {
-      update({ currentStep: step });
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    [update],
-  );
-
   if (loadError) {
     return (
       <div className="mx-auto max-w-[560px] px-4 py-20 text-center">
@@ -70,55 +78,142 @@ export function EmergencyMode({ id }: { id: string }) {
     );
   }
   if (!incident) {
-    return <div className="mx-auto mt-24 h-64 w-full max-w-[1040px] animate-pulse rounded-card bg-divider" aria-label="Memuat…" />;
+    return <div className="mx-auto mt-24 h-64 w-full max-w-[720px] animate-pulse rounded-card bg-divider" aria-label="Memuat…" />;
   }
 
-  const step = Math.min(incident.currentStep, 4);
   const c = incident.checklist ?? {};
   const comp = incident.completeness!;
   const isDone = (k: string) => comp.items.find((x) => x.key === k)?.done ?? false;
   const since = (now - new Date(incident.transferAt ?? incident.createdAt).getTime()) / 1000;
-
-  const next = (from: number) => {
-    void api.track('emergency_step_completed', { step: from + 1 });
-    goTo(from + 1);
-  };
+  const evidenceHref = `/evidence/${incident.id}`;
 
   const stepDone = (i: number) =>
-    i === 0 ? !!(c.stopTransfer && c.noOtp) : i === 1 ? !!incident.bankTicket || !!c.contactedBank : i === 2 ? comp.done === comp.total || !!incident.packGeneratedAt : !!incident.iascReportNo;
+    i === 0 ? !!(c.stopTransfer && c.noOtp)
+      : i === 1 ? !!incident.bankTicket || !!c.contactedBank
+        : i === 2 ? comp.done === comp.total || !!incident.packGeneratedAt
+          : !!incident.iascReportNo;
 
-  const navActions = (i: number, primaryLabel = 'Sudah, lanjut') => (
-    <>
-      {i > 0 ? (
-        <Button variant="secondary" onClick={() => goTo(i - 1)} className="w-full sm:w-auto"><ArrowLeft className="h-4 w-4" aria-hidden /> Kembali</Button>
-      ) : <span />}
-      <Button onClick={() => next(i)} className="w-full sm:w-auto">
-        {primaryLabel} <ArrowRight className="h-4 w-4" aria-hidden />
-        <span className="sr-only">. Berikutnya: {i < 3 ? STEPS[i + 1].title : 'Selesai'}</span>
-      </Button>
-    </>
-  );
+  const toggle = (i: number) => {
+    const next = open === i ? null : i;
+    setOpen(next);
+    if (next !== null) update({ currentStep: next });
+  };
 
-  const evidenceHref = `/evidence/${incident.id}`;
+  const finish = (i: number) => {
+    void api.track('emergency_step_completed', { step: i + 1 });
+    const next = Math.min(i + 1, 3);
+    setOpen(next);
+    update({ currentStep: next });
+  };
+
+  const detail: Record<number, { why: string; body: ReactNode; next?: ReactNode }> = {
+    0: {
+      why: 'Pihak yang menghubungi Anda sering meminta uang tambahan dengan alasan "biaya pencairan". Berhenti sekarang mencegah kerugian bertambah.',
+      body: (
+        <div className="flex flex-col gap-2.5">
+          <ChecklistItem id="c1" checked={!!c.stopTransfer} onChange={(v) => update({ checklist: { stopTransfer: v } })}>Jangan kirim uang lagi, apa pun alasannya.</ChecklistItem>
+          <ChecklistItem id="c2" checked={!!c.noOtp} onChange={(v) => update({ checklist: { noOtp: v } })}>Jangan bagikan kode OTP, PIN, atau kata sandi ke siapa pun.</ChecklistItem>
+          <ChecklistItem id="c3" checked={!!c.changePin} onChange={(v) => update({ checklist: { changePin: v } })}>Jika sempat dibagikan, ganti PIN lewat aplikasi resmi bank Anda.</ChecklistItem>
+        </div>
+      ),
+      next: <Button onClick={() => finish(0)}>Sudah, lanjut <ArrowRight className="h-4 w-4" aria-hidden /></Button>,
+    },
+    1: {
+      why: 'Bank bisa mencoba menahan dana di rekening tujuan jika Anda melapor dengan cepat.',
+      body: (
+        <>
+          {since < 3600 && (
+            <p className="mb-3 inline-flex items-center gap-2 rounded-btn border border-medium-border bg-medium-bg px-3.5 py-2 text-[13.5px] font-semibold text-medium-text">
+              <Clock className="h-4 w-4" aria-hidden /> Usahakan hubungi bank dalam 1 jam pertama · {hms(since)} sejak transfer
+            </p>
+          )}
+          <ol className="divide-y divide-divider">
+            <NumberedStep n={1} title="Telepon call center resmi bank atau e-wallet Anda.">
+              <Button variant="secondary" onClick={() => setContactsOpen(true)}><Phone className="h-4 w-4" aria-hidden /> Lihat kontak resmi bank</Button>
+            </NumberedStep>
+            <NumberedStep n={2} title="Sampaikan kalimat ini ke petugas.">
+              <ScriptBox text={bankScript(incident)} />
+            </NumberedStep>
+            <NumberedStep n={3} title="Catat nomor tiket atau nomor laporan dari bank.">
+              <label htmlFor="bankTicket" className="sr-only">Nomor tiket bank</label>
+              <input id="bankTicket" className={`${inputClass()} w-full max-w-[360px]`} placeholder="Contoh: 2026102800123"
+                defaultValue={incident.bankTicket ?? ''} onChange={(e) => update({ bankTicket: e.target.value, checklist: { contactedBank: !!e.target.value } })} />
+            </NumberedStep>
+          </ol>
+        </>
+      ),
+      next: <Button onClick={() => finish(1)}>Sudah, lanjut <ArrowRight className="h-4 w-4" aria-hidden /></Button>,
+    },
+    2: {
+      why: 'Satu dokumen PDF berisi bukti dan kronologi. Laporan dengan bukti lengkap lebih mudah diproses bank dan IASC.',
+      body: (
+        <>
+          <ul className="divide-y divide-divider rounded-btn border border-line">
+            {[
+              { label: 'Bukti transfer', done: isDone('proof') },
+              { label: 'Screenshot percakapan', done: isDone('chat') },
+              { label: 'Nomor rekening penerima', done: isDone('recipient') },
+              { label: 'Kronologi singkat', done: isDone('chronology'), partial: !!incident.chronology?.trim() },
+            ].map((item) => (
+              <li key={item.label} className="flex items-center justify-between gap-3 px-4 py-3">
+                <span className="text-[15px] font-medium">{item.label}</span>
+                {item.done ? <Pill tone="low">Sudah</Pill> : item.partial ? <Pill tone="medium">Sedang diisi</Pill> : <Pill tone="neutral">Belum</Pill>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-[14px] text-ink-3">Kelengkapan saat ini: {comp.done} dari {comp.total}.</p>
+        </>
+      ),
+      next: (
+        <Link href={evidenceHref} onClick={() => void flush()} className={buttonClass('primary')}>
+          <FileText className="h-4 w-4" aria-hidden /> Buka Evidence Pack
+        </Link>
+      ),
+    },
+    3: {
+      why: 'Indonesia Anti-Scam Centre (IASC) adalah kanal resmi untuk melaporkan penipuan keuangan agar bisa ditindaklanjuti.',
+      body: (
+        <ol className="divide-y divide-divider">
+          <NumberedStep n={1} title="Pastikan Evidence Pack (PDF) sudah siap.">
+            <Link href={evidenceHref} onClick={() => void flush()} className={buttonClass('secondary')}><FileText className="h-4 w-4" aria-hidden /> Buka Evidence Pack</Link>
+          </NumberedStep>
+          <NumberedStep n={2} title="Laporkan ke IASC — ScamGuard Co-Pilot membantu mengisi formulirnya.">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <button type="button" className={buttonClass('primary', 'w-full sm:w-auto')}
+                onClick={() => {
+                  void api.track('iasc_link_clicked');
+                  update({ checklist: { openedIasc: true } });
+                  void startIascReporting(incident, [], 'official');
+                }}>
+                Buka IASC dengan Co-Pilot ↗
+              </button>
+              <button type="button" className={buttonClass('secondary', 'w-full sm:w-auto')}
+                title="Simulasi portal IASC untuk demonstrasi"
+                onClick={() => {
+                  void api.track('iasc_demo_clicked');
+                  update({ checklist: { openedIasc: true } });
+                  void startIascReporting(incident, [], 'demo');
+                }}>
+                Simulasi Demo IASC ↗
+              </button>
+            </div>
+          </NumberedStep>
+          <NumberedStep n={3} title="Simpan nomor laporan IASC Anda.">
+            <label htmlFor="iasc" className="sr-only">Nomor laporan IASC</label>
+            <input ref={iascInputRef} id="iasc" className={`${inputClass()} w-full max-w-[360px]`} placeholder="Nomor laporan IASC"
+              defaultValue={incident.iascReportNo ?? ''} onChange={(e) => update({ iascReportNo: e.target.value })} />
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-3">Terisi otomatis bila Anda melapor lewat ScamGuard Co-Pilot.</p>
+          </NumberedStep>
+        </ol>
+      ),
+    },
+  };
+
+  const allDone = [0, 1, 2, 3].every(stepDone);
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
-        <div className="mx-auto flex min-h-[68px] max-w-[1240px] flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-8">
-          <div className="flex items-center gap-3">
-            <Logo />
-            <Pill tone="high">Mode Darurat</Pill>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-btn border border-line bg-bg px-3 py-2" aria-live="off">
-              <Clock className="h-4 w-4 text-ink-3" aria-hidden />
-              <span className="text-[12px] text-ink-3">Sejak transfer</span>
-              <span className="font-mono text-[15px] font-bold tabular-nums" aria-label={`Sejak transfer ${hms(since)}`}>{hms(since)}</span>
-            </div>
-            <Link href="/" className={buttonClass('secondary', '!min-h-[40px] !px-3')} aria-label="Beranda"><Home className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Beranda</span></Link>
-          </div>
-        </div>
-      </header>
+      <Header crumbs={[{ label: 'Beranda', href: '/' }, { label: 'Mode Darurat', plain: true }]} />
       <OfflineBanner show={save === 'offline' && !local} />
       {local && (
         <div role="status" className="border-b border-medium-border bg-medium-bg px-4 py-2 text-center text-[13px] font-medium text-medium-text">
@@ -126,151 +221,66 @@ export function EmergencyMode({ id }: { id: string }) {
         </div>
       )}
 
-      <main className="mx-auto w-full max-w-[1040px] flex-1 px-4 pb-16 pt-8 sm:px-6">
+      <main className="mx-auto w-full max-w-[752px] flex-1 px-4 pb-16 pt-14 sm:px-4">
         <div className="text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary-strong bg-primary-soft px-3.5 py-1.5 text-[12.5px] font-bold uppercase tracking-[0.06em] text-primary">
+          <span className="inline-flex items-center gap-2 rounded-full border border-primary-strong bg-primary-soft px-4 py-1.5 text-[12.5px] font-bold uppercase tracking-[0.06em] text-primary">
             <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />Panduan tanggap darurat
           </span>
-          <h1 className="mt-4 text-[28px] font-extrabold leading-tight tracking-tight sm:text-[34px]">Kami pandu Anda dalam 4 langkah</h1>
-          <p className="mx-auto mt-2 max-w-[560px] text-[16px] text-ink-2">Tenang. Ikuti satu langkah dalam satu waktu.</p>
-          {since < 3600 && step < 2 && (
-            <p className="mx-auto mt-4 inline-flex items-center gap-2 rounded-btn border border-medium-border bg-medium-bg px-4 py-2 text-[14px] font-semibold text-medium-text">
-              <Clock className="h-4 w-4" aria-hidden /> Usahakan hubungi bank dalam 1 jam pertama.
-            </p>
-          )}
+          <h1 className="mt-5 text-[34px] font-extrabold leading-tight tracking-tight sm:text-[42px]">Mode Darurat</h1>
+          <p className="mx-auto mt-3 max-w-[480px] text-[18px] leading-relaxed text-ink-2">Tenang. Ikuti langkah berikut untuk melindungi diri Anda.</p>
         </div>
 
-        <div className="mt-8"><EmergencyStepper steps={STEPS} current={step} done={stepDone} onSelect={goTo} /></div>
-
-        <div className="mt-6">
-          {step === 0 && (
-            <StepCard index={0} title={STEPS[0].title}
-              why={'Pihak yang menghubungi Anda sering meminta uang tambahan dengan alasan "biaya pencairan". Berhenti sekarang mencegah kerugian bertambah.'}
-              actions={navActions(0)}>
-              <div className="flex flex-col gap-2.5">
-                <ChecklistItem id="c1" checked={!!c.stopTransfer} onChange={(v) => update({ checklist: { stopTransfer: v } })}>Jangan kirim uang lagi, apa pun alasannya.</ChecklistItem>
-                <ChecklistItem id="c2" checked={!!c.noOtp} onChange={(v) => update({ checklist: { noOtp: v } })}>Jangan bagikan kode OTP, PIN, atau kata sandi ke siapa pun.</ChecklistItem>
-                <ChecklistItem id="c3" checked={!!c.changePin} onChange={(v) => update({ checklist: { changePin: v } })}>Jika sempat dibagikan, ganti PIN lewat aplikasi resmi bank Anda.</ChecklistItem>
-              </div>
-            </StepCard>
-          )}
-
-          {step === 1 && (
-            <StepCard index={1} title={STEPS[1].title}
-              why="Bank bisa mencoba menahan dana di rekening tujuan jika Anda melapor dengan cepat."
-              actions={navActions(1)}>
-              <ol className="divide-y divide-divider">
-                <NumberedStep n={1} title="Telepon call center resmi bank atau e-wallet Anda.">
-                  <Button variant="secondary" onClick={() => setContactsOpen(true)}><Phone className="h-4 w-4" aria-hidden /> Lihat kontak resmi bank</Button>
-                </NumberedStep>
-                <NumberedStep n={2} title="Sampaikan kalimat ini ke petugas.">
-                  <ScriptBox text={bankScript(incident)} />
-                </NumberedStep>
-                <NumberedStep n={3} title="Catat nomor tiket atau nomor laporan dari bank.">
-                  <label htmlFor="bankTicket" className="sr-only">Nomor tiket bank</label>
-                  <input id="bankTicket" className={`${inputClass()} max-w-[360px]`} placeholder="Contoh: 2026102800123"
-                    defaultValue={incident.bankTicket ?? ''} onChange={(e) => update({ bankTicket: e.target.value, checklist: { contactedBank: !!e.target.value } })} />
-                </NumberedStep>
-              </ol>
-            </StepCard>
-          )}
-
-          {step === 2 && (
-            <StepCard index={2} title={STEPS[2].title}
-              why="Satu dokumen PDF berisi bukti dan kronologi. Laporan dengan bukti lengkap lebih mudah diproses bank dan IASC."
-              actions={
-                <>
-                  <Button variant="secondary" onClick={() => next(2)} className="w-full sm:w-auto">Lewati dulu, lanjut <ArrowRight className="h-4 w-4" aria-hidden /></Button>
-                  <Link href={evidenceHref} onClick={() => void flush()} className={buttonClass('primary', 'w-full sm:w-auto')}>
-                    <FileText className="h-4 w-4" aria-hidden /> Lengkapi Evidence Pack
-                  </Link>
-                </>
-              }>
-              <ul className="divide-y divide-divider rounded-btn border border-line">
-                {[
-                  { label: 'Bukti transfer', done: isDone('proof') },
-                  { label: 'Screenshot percakapan', done: isDone('chat') },
-                  { label: 'Nomor rekening penerima', done: isDone('recipient') },
-                  { label: 'Kronologi singkat', done: isDone('chronology'), partial: !!incident.chronology?.trim() },
-                ].map((item) => (
-                  <li key={item.label} className="flex items-center justify-between gap-3 px-4 py-3.5">
-                    <span className="text-[15px] font-medium">{item.label}</span>
-                    {item.done ? <Pill tone="low">Sudah</Pill> : item.partial ? <Pill tone="medium">Sedang diisi</Pill> : <Pill tone="neutral">Belum</Pill>}
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 text-[14px] text-ink-3">Kelengkapan saat ini: {comp.done} dari {comp.total}.</p>
-            </StepCard>
-          )}
-
-          {step === 3 && (
-            <StepCard index={3} title={STEPS[3].title}
-              why="Indonesia Anti-Scam Centre adalah kanal resmi untuk melaporkan penipuan keuangan agar bisa ditindaklanjuti."
-              actions={navActions(3, 'Selesai')}>
-              <ol className="divide-y divide-divider">
-                <NumberedStep n={1} title="Unduh Evidence Pack (PDF).">
-                  <Link href={evidenceHref} onClick={() => void flush()} className={buttonClass('secondary')}><FileText className="h-4 w-4" aria-hidden /> Buka Evidence Pack</Link>
-                </NumberedStep>
-                <NumberedStep n={2} title="Buka situs IASC, isi formulir, lalu lampirkan PDF.">
-                  <div className="flex flex-col gap-2.5 sm:flex-row">
-                    <button
-                      type="button"
-                      className={buttonClass('primary')}
-                      onClick={() => {
-                        void api.track('iasc_link_clicked');
-                        update({ checklist: { openedIasc: true } });
-                        void startIascReporting(incident, [], 'official');
-                      }}
-                    >
-                      Buka IASC dengan Co-Pilot ↗
-                    </button>
-                    <button
-                      type="button"
-                      className={buttonClass('secondary')}
-                      onClick={() => {
-                        void api.track('iasc_demo_clicked');
-                        update({ checklist: { openedIasc: true } });
-                        void startIascReporting(incident, [], 'demo');
-                      }}
-                      title="Gunakan simulasi demo untuk demonstrasi luring/pitching lomba"
-                    >
-                      Simulasi Demo IASC (Pitch) ↗
-                    </button>
+        <ol className="mt-10 flex flex-col gap-5" aria-label="Langkah darurat">
+          {STEPS.map((s, i) => {
+            const Icon = s.icon;
+            const isOpen = open === i;
+            const done = stepDone(i);
+            const d = detail[i];
+            return (
+              <li key={s.title} className={`rounded-card border bg-white shadow-card transition ${isOpen ? 'border-primary-strong' : 'border-line'}`}>
+                <button type="button" onClick={() => toggle(i)} aria-expanded={isOpen} aria-controls={`step-${i}`}
+                  className="flex w-full items-center gap-5 rounded-card px-6 py-6 text-left sm:px-7">
+                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[17px] font-bold text-white ${done ? 'bg-low' : 'bg-primary'}`}>
+                    {done ? <Check className="h-5 w-5" aria-hidden /> : i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[18px] font-bold leading-snug">{s.title}</span>
+                    <span className="mt-1 block text-[15px] leading-relaxed text-ink-2">{s.desc}</span>
+                  </span>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-btn border border-primary-border bg-primary-soft text-primary">
+                    <Icon className="h-5 w-5" aria-hidden />
+                  </span>
+                </button>
+                {isOpen && (
+                  <div id={`step-${i}`} className="border-t border-divider px-6 pb-6 pt-5 sm:px-7">
+                    <WhyBox>{d.why}</WhyBox>
+                    <h3 className="mt-5 text-[15px] font-bold">Caranya</h3>
+                    <div className="mt-3">{d.body}</div>
+                    {d.next && <div className="mt-5 flex justify-end">{d.next}</div>}
                   </div>
-                </NumberedStep>
-                <NumberedStep n={3} title="Simpan nomor laporan IASC Anda.">
-                  <label htmlFor="iasc" className="sr-only">Nomor laporan IASC</label>
-                  <input id="iasc" className={`${inputClass()} max-w-[360px]`} placeholder="Nomor laporan IASC"
-                    defaultValue={incident.iascReportNo ?? ''} onChange={(e) => update({ iascReportNo: e.target.value })} />
-                </NumberedStep>
-              </ol>
-            </StepCard>
-          )}
+                )}
+              </li>
+            );
+          })}
+        </ol>
 
-          {step === 4 && (
-            <section className="rounded-card border border-line bg-white p-6 text-center shadow-card sm:p-10">
-              <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-low-bg text-low"><ShieldCheck className="h-8 w-8" aria-hidden /></span>
-              <h2 className="mt-4 text-[26px] font-extrabold">Semua langkah selesai</h2>
-              <p className="mx-auto mt-2 max-w-[520px] text-[16px] leading-relaxed text-ink-2">
-                Anda sudah melakukan yang terbaik. Simpan Evidence Pack, nomor tiket bank, dan nomor laporan IASC untuk tindak lanjut.
-              </p>
-              <dl className="mx-auto mt-6 grid max-w-[520px] gap-3 text-left sm:grid-cols-2">
-                <div className="rounded-btn border border-line bg-bg p-4"><dt className="text-[12px] text-ink-3">Nomor tiket bank</dt><dd className="mt-1 font-mono text-[15px] font-bold">{incident.bankTicket || '—'}</dd></div>
-                <div className="rounded-btn border border-line bg-bg p-4"><dt className="text-[12px] text-ink-3">Nomor laporan IASC</dt><dd className="mt-1 font-mono text-[15px] font-bold">{incident.iascReportNo || '—'}</dd></div>
-              </dl>
-              <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-                <Button variant="secondary" onClick={() => goTo(3)}><ArrowLeft className="h-4 w-4" aria-hidden /> Kembali ke langkah 4</Button>
-                <Link href={evidenceHref} className={buttonClass('primary')}><FileText className="h-4 w-4" aria-hidden /> Lihat Evidence Pack</Link>
-              </div>
-            </section>
-          )}
-        </div>
+        {allDone && (
+          <div className="mt-6 rounded-card border border-low-border bg-low-bg p-5 text-[15px] text-low-text">
+            <p className="font-bold">Semua langkah selesai.</p>
+            <p className="mt-1 text-ink-2">Nomor tiket bank: <strong className="font-mono">{incident.bankTicket || '—'}</strong> · Nomor laporan IASC: <strong className="font-mono">{incident.iascReportNo || '—'}</strong></p>
+          </div>
+        )}
 
-        <p className="mx-auto mt-8 max-w-[720px] text-center text-[13px] leading-relaxed text-ink-3">
-          ScamGuard tidak dapat membatalkan transfer atau memblokir rekening. ScamGuard membantu Anda bertindak cepat dan menyusun bukti untuk kanal resmi (bank, e-wallet, IASC).
+        <Link href={evidenceHref} onClick={() => { update({ currentStep: Math.max(incident.currentStep, 2) }); void flush(); }}
+          className={buttonClass('primary', 'mt-9 h-[58px] w-full text-[17px]')}>
+          Lanjut ke Pengumpulan Bukti <ArrowRight className="h-5 w-5" aria-hidden />
+        </Link>
+
+        <p className="mt-9 flex items-center justify-center gap-2 text-center text-[13.5px] text-ink-2">
+          <CheckCircle2 className="h-4 w-4 text-primary" aria-hidden /> ScamGuard membantu Anda bertindak cepat dan terstruktur.
         </p>
         <p className="mt-2 text-center text-[12px] text-ink-3" aria-live="polite">
-          {save === 'saving' ? 'Menyimpan…' : save === 'saved' ? 'Tersimpan' : ''} · ID {incident.code}
+          {save === 'saving' ? 'Menyimpan… · ' : save === 'saved' ? 'Tersimpan · ' : ''}ID {incident.code}
         </p>
       </main>
       <Footer />

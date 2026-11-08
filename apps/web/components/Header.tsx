@@ -14,7 +14,7 @@ export function Logo() {
   );
 }
 
-export interface Crumb { label: string; href?: string }
+export interface Crumb { label: string; href?: string; plain?: boolean }
 
 export function Header({ crumbs = [], right }: { crumbs?: Crumb[]; right?: ReactNode }) {
   return (
@@ -28,6 +28,8 @@ export function Header({ crumbs = [], right }: { crumbs?: Crumb[]; right?: React
                 {i > 0 && <ChevronRight className="h-4 w-4 text-ink-3" aria-hidden />}
                 {c.href ? (
                   <Link href={c.href} className="text-ink-3 hover:text-primary">{c.label}</Link>
+                ) : c.plain ? (
+                  <span aria-current="page" className="font-medium text-ink">{c.label}</span>
                 ) : (
                   <span aria-current="page" className="rounded-md border border-primary-strong bg-primary-soft px-2.5 py-1 font-semibold text-primary">{c.label}</span>
                 )}
@@ -44,11 +46,11 @@ export function Footer() {
   return (
     <footer className="mt-auto border-t border-line bg-white">
       <div className="mx-auto flex max-w-[1240px] flex-col gap-2 px-4 py-5 text-[13px] text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <p>© 2026 ScamGuard · Tim Yuri Time, Universitas Telkom.</p>
-        <nav className="flex gap-5">
+        <p>© 2026 ScamGuard Indonesia. Melindungi transaksi digital Anda.</p>
+        <nav className="flex flex-wrap gap-x-7 gap-y-2">
           <Link href="/tentang#privasi" className="hover:text-primary">Kebijakan Privasi</Link>
-          <Link href="/tentang" className="hover:text-primary">Tentang</Link>
-          <Link href="/riwayat" className="hover:text-primary">Riwayat</Link>
+          <Link href="/tentang" className="hover:text-primary">Syarat &amp; Ketentuan</Link>
+          <Link href="/tentang" className="hover:text-primary">Hubungi Layanan</Link>
         </nav>
       </div>
     </footer>

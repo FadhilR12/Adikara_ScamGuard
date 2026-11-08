@@ -1,13 +1,11 @@
 // Layar 1A — Beranda popup (desain reference/Extension Container.png).
 import { looksLikeNumber, looksLikeUrl, parseUrl } from '@scamguard/risk-engine';
 import { LEVEL_LABEL } from '@scamguard/shared';
-import { EXT_VERSION } from '../../config';
 import { $, html, type Raw } from '../../lib/dom';
 import { icon } from '../../lib/icons';
 import { send, type CheckInputType, type TabStatus } from '../../lib/messaging';
-import { getLocal } from '../../lib/storage';
 import { state } from '../state';
-import { pill, timeAgo, toast } from '../ui';
+import { toast } from '../ui';
 import type { Navigate } from '../popup';
 
 const MAX_TEXT = 5000;
@@ -106,7 +104,6 @@ export async function renderHome(app: HTMLElement, navigate: Navigate): Promise<
   const status: TabStatus = tabId !== null
     ? await send({ type: 'GET_TAB_STATUS', tabId })
     : { supported: false, loading: false, enabled: true, domain: null, url: null, tab: null };
-  const { history = [] } = await getLocal('history');
 
   // Prefill cerdas: halaman aktif Sedang/Tinggi → isi URL-nya (PRD 8.3).
   if (!state.draft && status.tab && status.tab.result.level !== 'low') state.draft = status.tab.url;
@@ -145,34 +142,16 @@ export async function renderHome(app: HTMLElement, navigate: Navigate): Promise<
         </div>
         <button data-upload class="btn-secondary mt-1 h-10 w-full text-[13.5px] font-semibold">${icon('upload', 16)} Unggah Screenshot</button>
         <button data-check class="btn-primary mt-2.5 w-full">${icon('search', 17)} Periksa Risiko</button>
+        <p class="mt-3 text-center text-[12.5px] text-ink-2">Sudah terlanjur transfer?
+          <button data-emergency class="font-bold text-primary hover:text-primary-hover">Lihat panduan</button></p>
       </section>
 
-      <button data-emergency class="flex items-center gap-3 rounded-card border border-line px-3.5 py-3 text-left transition hover:bg-bg">
-        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-btn bg-high-bg text-high">${icon('lifeBuoy', 18)}</span>
-        <span class="min-w-0 flex-1">
-          <span class="block text-[14px] font-bold">Saya sudah transfer</span>
-          <span class="block text-[12px] text-ink-3">Panduan langkah darurat</span>
-        </span>
-        <span class="text-ink-3">${icon('chevronRight', 18)}</span>
-      </button>
-
-      ${history.length
-        ? html`<section>
-            <p class="section-label mb-1">Pemeriksaan terakhir</p>
-            <ul>${history.slice(0, 2).map((h) => html`
-              <li class="flex items-center gap-2 border-b border-divider py-2 last:border-0">
-                <span class="min-w-0 flex-1 truncate text-[13px]" title="${h.value}">${h.value}</span>
-                <span class="text-[11px] text-ink-3">${timeAgo(h.at)}</span>${pill(h.level, { low: 'Rendah', medium: 'Sedang', high: 'Tinggi' }[h.level])}
-              </li>`)}</ul>
-          </section>`
-        : ''}
     </div>
 
     <footer class="flex items-center justify-center gap-3 border-t border-divider px-4 py-3 text-[12.5px] text-ink-2">
       <button data-nav="history" class="rounded px-1 hover:text-primary">Riwayat</button><span class="text-line">|</span>
       <button data-nav="settings" class="rounded px-1 hover:text-primary">Pengaturan</button><span class="text-line">|</span>
       <button data-nav="help" class="rounded px-1 hover:text-primary">Bantuan</button>
-      <span class="ml-auto text-[11px] text-ink-3">v${EXT_VERSION}</span>
     </footer>`.value;
 
   const input = $(app, '#manual') as HTMLTextAreaElement;
