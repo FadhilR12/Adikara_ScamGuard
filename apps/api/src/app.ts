@@ -21,7 +21,11 @@ export function createApp(db: DB) {
   app.use(
     cors({
       origin(origin, cb) {
-        const ok = !origin || env.corsOrigins.includes(origin) || (env.allowAnyExtension && origin.startsWith('chrome-extension://'));
+        const ok =
+          !origin ||
+          env.corsOrigins.includes('*') ||
+          env.corsOrigins.includes(origin) ||
+          (env.allowAnyExtension && origin.startsWith('chrome-extension://'));
         cb(null, ok);
       },
       allowedHeaders: ['Content-Type', 'X-Device-Id', 'X-Ext-Version'],

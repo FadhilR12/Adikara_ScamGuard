@@ -9,3 +9,5 @@ apps/api/data/
 .DS_Store
 coverage/
 reference/
+cloudflared.exe
+*.exe
