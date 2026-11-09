@@ -19,6 +19,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "multer": "^1.4.5-lts.1",
+    "tsx": "^4.23.15",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -29,7 +30,6 @@
     "@types/node": "^22",
     "@types/supertest": "^7.2.1",
     "supertest": "^7.3.1",
-    "tsx": "^4.23.15",
     "vitest": "^2.1.8"
   }
 }

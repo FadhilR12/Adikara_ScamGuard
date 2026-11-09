@@ -41,6 +41,9 @@ const patchBody = z
       .refine((v) => v === '' || /^[a-z0-9]{6,20}$/i.test(v.replace(/[\s-]/g, '')), 'Nomor rekening/akun 6–20 karakter alfanumerik.')
       .nullable(),
     recipientName: nullableText(100),
+    perpetratorName: nullableText(100),
+    perpetratorHandle: nullableText(150),
+    perpetratorPhone: nullableText(50),
     relatedAccounts: z.array(z.string().trim().max(300)).max(20),
     chronology: nullableText(3000),
     bankTicket: nullableText(60),
@@ -52,7 +55,9 @@ const patchBody = z
 const COLUMN: Record<string, string> = {
   currentStep: 'current_step', status: 'status', checklist: 'checklist', scamType: 'scam_type',
   contactChannel: 'contact_channel', transferAt: 'transfer_at', amount: 'amount', recipientBank: 'recipient_bank',
-  recipientAccount: 'recipient_account', recipientName: 'recipient_name', relatedAccounts: 'related_accounts',
+  recipientAccount: 'recipient_account', recipientName: 'recipient_name',
+  perpetratorName: 'perpetrator_name', perpetratorHandle: 'perpetrator_handle', perpetratorPhone: 'perpetrator_phone',
+  relatedAccounts: 'related_accounts',
   chronology: 'chronology', bankTicket: 'bank_ticket', iascReportNo: 'iasc_report_no',
 };
 

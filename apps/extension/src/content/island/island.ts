@@ -33,7 +33,7 @@ const STEP_NOTE: Record<number, string> = {
   1: 'Isi data diri Anda sendiri (NIK/KTP), lalu klik "Lanjut" di formulir. ScamGuard tidak menyimpan data kependudukan Anda.',
   2: 'Klik tombol di bawah. ScamGuard membuka jendela IASC dan mengisinya — Anda cukup memeriksa lalu klik "Simpan".',
   3: 'Satu klik untuk mengisi waktu kejadian, kronologi, dan melampirkan Evidence Pack.',
-  4: 'Isi rekening Anda sendiri di formulir. Rekening pelaku, nominal, dan PDF diisi oleh ScamGuard.',
+  4: 'Isi rekening bank Anda sendiri di formulir utama. Lalu klik tombol di bawah untuk mengisi rekening & bukti pelaku.',
   5: 'Centang pernyataan, ketik kode CAPTCHA, lalu klik "Kirim". Bagian ini sengaja tidak diisi otomatis.',
 };
 
@@ -48,7 +48,7 @@ const STEP_TASKS: Record<number, Task[]> = {
     { id: 'sumber', title: 'Sumber penipuan' },
   ],
   3: [{ id: 'kejadian', title: 'Kronologi & bukti PDF' }],
-  4: [{ id: 'transaksi', title: 'Rekening & transaksi pelaku' }],
+  4: [{ id: 'transaksi', title: 'Isi rekening & bukti pelaku' }],
 };
 
 const SVG: Record<string, string> = {

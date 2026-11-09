@@ -138,6 +138,9 @@ export interface Incident {
   recipientBank?: string | null;
   recipientAccount?: string | null;
   recipientName?: string | null;
+  perpetratorName?: string | null;
+  perpetratorHandle?: string | null;
+  perpetratorPhone?: string | null;
   relatedAccounts?: string[];
   chronology?: string | null;
   bankTicket?: string | null;
@@ -179,8 +182,10 @@ export interface ReportingSession {
     bankName?: string;
     accountNumber?: string;
     accountHolder?: string;
+    perpetratorName?: string;
     perpetratorPhone?: string;
     perpetratorPlatform?: string;
+    perpetratorHandle?: string;
     lossAmount?: number;
     incidentDate?: string;
     chronology: string;

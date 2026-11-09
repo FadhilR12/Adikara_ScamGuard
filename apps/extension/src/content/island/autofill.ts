@@ -424,8 +424,9 @@ async function fillTerlapor(session: ReportingSession): Promise<AutofillResult> 
     if (setText(nomor, normalizePhone(t.perpetratorPhone))) filled.push('Nomor Terlapor');
   } else pending.push('Nomor Terlapor');
 
+  const namaTerlaporVal = t.perpetratorName?.trim() || t.accountHolder?.trim() || '';
   const nama = findInput(['input[name="nama_terlapor"]'], root) ?? findByLabel(/nama terlapor/i, root, 'input');
-  if (t.accountHolder && setText(nama, t.accountHolder)) filled.push('Nama Terlapor');
+  if (namaTerlaporVal && setText(nama, namaTerlaporVal)) filled.push('Nama Terlapor');
   else pending.push('Nama Terlapor');
 
   const fileInput = findInput(['input[type="file"][name="file_bukti_komunikasi_terlapor"]'], root) as HTMLInputElement | null;
@@ -452,12 +453,19 @@ async function fillSumber(session: ReportingSession): Promise<AutofillResult> {
   if (await setSelect(sumber, sumberCandidates(t.perpetratorPlatform))) filled.push('Sumber / Media');
   else pending.push('Sumber / Media');
 
-  const platform = PLATFORM_LABEL[t.perpetratorPlatform ?? ''] ?? t.perpetratorPlatform ?? '';
-  const contact = t.perpetratorPhone ?? '';
-  const detailText = [platform, contact].filter(Boolean).join(' - ');
+  const platformKey = (t.perpetratorPlatform ?? '').toLowerCase();
+  const isPhoneBased = ['whatsapp', 'sms', 'telepon', 'wa', 'call'].some((p) => platformKey.includes(p));
+  let detailText = '';
+  if (isPhoneBased) {
+    // WhatsApp / SMS / Telepon: utamakan nomor HP
+    detailText = t.perpetratorPhone || t.perpetratorHandle || '';
+  } else {
+    // Instagram, Telegram, Facebook, Situs Web, dll: utamakan username / handle / link
+    detailText = t.perpetratorHandle || t.perpetratorPhone || '';
+  }
   const detail = findInput(['input[name="detail_sumber_informasi_penipuan"]'], root) ?? findByLabel(/detail sumber/i, root, 'input, textarea');
   if (detailText && setText(detail, detailText)) filled.push('Detail Sumber');
-  else pending.push('Detail Sumber (username/link)');
+  else pending.push('Detail Sumber (username/nomor)');
 
   const fileInput = findInput(['input[type="file"][name="file_bukti_sumber_informasi_penipuan"]'], root) as HTMLInputElement | null;
   const outcome = attachEvidence(session, fileInput, 2 * MB);
@@ -563,8 +571,9 @@ async function fillTransaksi(session: ReportingSession): Promise<AutofillResult>
   }
 
   if (!modal) notes.unshift('Klik "Tambah Informasi Penyelenggara Terlapor" bila jendela belum terbuka.');
+  notes.push('Rekening Anda sendiri (korban) diisi mandiri di formulir utama IASC.');
   return {
-    ...result(filled, pending, 'Rekening, transaksi & PDF pelaku terisi. Periksa lalu klik "Simpan" di jendela IASC.', 'Form penyelenggara terlapor tidak ditemukan.', notes),
+    ...result(filled, pending, 'Rekening & bukti pelaku terisi. Klik "Simpan" di pop-up, lalu pastikan rekening Anda di form utama terisi.', 'Form penyelenggara terlapor tidak ditemukan.', notes),
     attachedFile: outcome === 'ok',
   };
 }

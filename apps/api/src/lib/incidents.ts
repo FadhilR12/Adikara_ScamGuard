@@ -8,7 +8,8 @@ export interface IncidentRow {
   id: string; code: string; user_id: string; status: Incident['status']; current_step: number; checklist: string;
   source: string | null; related_domain: string | null; scam_type: string | null; contact_channel: string | null;
   transfer_at: string | null; amount: number | null; recipient_bank: string | null; recipient_account: string | null;
-  recipient_name: string | null; related_accounts: string | null; chronology: string | null; bank_ticket: string | null;
+  recipient_name: string | null; perpetrator_name?: string | null; perpetrator_handle?: string | null; perpetrator_phone?: string | null;
+  related_accounts: string | null; chronology: string | null; bank_ticket: string | null;
   iasc_report_no: string | null; pack_generated_at: string | null; created_at: string; updated_at: string;
 }
 
@@ -32,6 +33,9 @@ export function toIncident(row: IncidentRow, evidenceRows: EvidenceRow[] = []): 
     checklist: parseJson<Checklist>(row.checklist, {}), source: row.source, relatedDomain: row.related_domain,
     scamType: row.scam_type, contactChannel: row.contact_channel, transferAt: row.transfer_at, amount: row.amount,
     recipientBank: row.recipient_bank, recipientAccount: row.recipient_account, recipientName: row.recipient_name,
+    perpetratorName: row.perpetrator_name ?? null,
+    perpetratorHandle: row.perpetrator_handle ?? null,
+    perpetratorPhone: row.perpetrator_phone ?? null,
     relatedAccounts: parseJson<string[]>(row.related_accounts, []), chronology: row.chronology, bankTicket: row.bank_ticket,
     iascReportNo: row.iasc_report_no, packGeneratedAt: row.pack_generated_at, createdAt: row.created_at,
     updatedAt: row.updated_at, evidence,

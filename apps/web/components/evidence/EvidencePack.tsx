@@ -43,7 +43,7 @@ async function sha256Hex(blob: Blob): Promise<string> {
 
 function chronologyTemplate(i: Incident): string {
   const media = CONTACT_CHANNELS.find((c) => c.value === i.contactChannel)?.label ?? '[media]';
-  const akun = i.relatedAccounts?.[0] || '[akun]';
+  const akun = i.perpetratorHandle || i.perpetratorPhone || i.perpetratorName || i.relatedAccounts?.[0] || '[akun]';
   const tgl = i.transferAt ? formatDate(i.transferAt) : '[Tanggal]';
   const jam = i.transferAt ? formatTime(i.transferAt) : '[jam]';
   return [
@@ -334,22 +334,33 @@ export function EvidencePack({ id }: { id: string }) {
                 <input id="recipientAccount" className={inputClass(!!w.recipientAccount || accountInvalid)} value={incident.recipientAccount ?? ''} inputMode="numeric"
                   placeholder="Contoh: 8820194829" aria-describedby="recipientAccount-msg" maxLength={24} onChange={(e) => update({ recipientAccount: e.target.value })} />
               </Field>
-              <Field id="recipientName" label="Nama Pemilik Rekening">
-                <input id="recipientName" className={inputClass()} value={incident.recipientName ?? ''} placeholder="a/n penerima" onChange={(e) => update({ recipientName: e.target.value })} />
+              <Field id="recipientName" label="Nama Pemilik Rekening Tujuan" hint="Sesuai nama rekening penampung / a.n. penerima">
+                <input id="recipientName" className={inputClass()} value={incident.recipientName ?? ''} placeholder="a/n pemilik rekening pelaku" onChange={(e) => update({ recipientName: e.target.value })} />
               </Field>
-              <Field id="related" label="Nomor / Akun Pelaku" hint="Pisahkan dengan koma.">
-                <input id="related" className={inputClass()} placeholder="mis. 0812xxxx, @admin_cuan"
-                  value={relatedText ?? (incident.relatedAccounts ?? []).join(', ')}
-                  onChange={(e) => {
-                    setRelatedText(e.target.value);
-                    update({ relatedAccounts: e.target.value.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20) });
-                  }} />
+              <Field id="perpetratorName" label="Nama Terlapor / Pelaku" hint="Nama profil medsos/kontak pelaku yang menghubungi">
+                <input id="perpetratorName" className={inputClass()} value={incident.perpetratorName ?? ''} placeholder="misal: Admin Promo Shopee, David Kripto" onChange={(e) => update({ perpetratorName: e.target.value })} />
               </Field>
-              <Field id="contactChannel" label="Media Kontak Pertama">
+              <Field id="contactChannel" label="Media Kontak / Sumber Penipuan">
                 <select id="contactChannel" className={inputClass()} value={incident.contactChannel ?? ''} onChange={(e) => update({ contactChannel: e.target.value || null })}>
                   <option value="">Pilih…</option>
                   {CONTACT_CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
+              </Field>
+              <Field id="perpetratorPhone" label="Nomor Telepon / WhatsApp Pelaku" hint="Nomor HP pelaku (jika kontak via WA/Telepon/SMS)">
+                <input id="perpetratorPhone" className={inputClass()} value={incident.perpetratorPhone ?? ''} placeholder="Contoh: 081234567890"
+                  onChange={(e) => {
+                    const phone = e.target.value;
+                    const accounts = [phone, incident.perpetratorHandle].filter(Boolean) as string[];
+                    update({ perpetratorPhone: phone, relatedAccounts: accounts });
+                  }} />
+              </Field>
+              <Field id="perpetratorHandle" label="Username / Tautan Akun Pelaku" hint="Username IG/Telegram atau link web penipu">
+                <input id="perpetratorHandle" className={inputClass()} value={incident.perpetratorHandle ?? ''} placeholder="misal: @toko_promo_official atau link web"
+                  onChange={(e) => {
+                    const handle = e.target.value;
+                    const accounts = [incident.perpetratorPhone, handle].filter(Boolean) as string[];
+                    update({ perpetratorHandle: handle, relatedAccounts: accounts });
+                  }} />
               </Field>
               <Field id="scamType" label="Jenis Modus">
                 <select id="scamType" className={inputClass()} value={incident.scamType ?? ''} onChange={(e) => update({ scamType: e.target.value || null })}>

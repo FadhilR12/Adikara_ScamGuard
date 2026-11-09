@@ -117,11 +117,13 @@ export async function generateEvidencePack(incident: Incident, files: PackFile[]
     ['Jenis modus', label(SCAM_TYPES, incident.scamType)],
     ['Waktu transfer', formatDateTime(incident.transferAt)],
     ['Nominal', formatRupiah(incident.amount)],
-    ['Bank / e-wallet penerima', incident.recipientBank ?? ''],
-    ['Nomor rekening / akun', incident.recipientAccount ?? ''],
-    ['Nama pemilik rekening', incident.recipientName ?? ''],
-    ['Media kontak pertama', label(CONTACT_CHANNELS, incident.contactChannel)],
-    ['Tautan / akun terkait', (incident.relatedAccounts ?? []).join(', ')],
+    ['Bank / e-wallet penerima (pelaku)', incident.recipientBank ?? ''],
+    ['Nomor rekening / akun penerima', incident.recipientAccount ?? ''],
+    ['Nama pemilik rekening tujuan', incident.recipientName ?? ''],
+    ['Nama / alias terlapor (pelaku)', incident.perpetratorName ?? ''],
+    ['Media kontak penipuan', label(CONTACT_CHANNELS, incident.contactChannel)],
+    ['Nomor telepon / WA pelaku', incident.perpetratorPhone ?? ''],
+    ['Username / akun medsos pelaku', incident.perpetratorHandle ?? ''],
   ]);
 
   // 3. Kronologi
